@@ -240,6 +240,22 @@ function three_body_elements(N_Φ, coeff, PseudoPot::Array{Float64})
     return Coefficients
 end;
 
+function Neutralize_Backgroud(Coeff::Dict, N_Φ, v)
+    Background_coeff = Dict()
+    for n in 0:(N_Φ-2)
+        for m in n:N_Φ-1
+            if haskey(Coeff, [n, m, m, n])
+                if !haskey(Background_coeff, [n,n])
+                    Background_coeff[[n, n]] = -v*Coeff[[n, m, m, n]]
+                else
+                    Background_coeff[[n, n]] += -v*Coeff[[n, m, m, n]]
+                end
+            end
+        end
+    end
+
+    return Background_coeff
+end
 
 ###################################################################
 
@@ -416,7 +432,8 @@ end
 #############################
 
 
-function finite_Cylinder_MPO(N_Φ::Int64, L_x::Float64, Vs::Array{Float64,1}, prec::Float64, type::String)
+function finite_Cylinder_MPO(N_Φ::Int64, L_x::Float64, Vs::Array{Float64,1}, prec::Float64, type::String; NeutralizBackGround::Bool=false, filling::Float64=1/2)
+    if !NeutralizBackGround ||  type=="three"
         rough_N = N_Φ-2
         test = rough_N
             while rough_N <= test
@@ -428,6 +445,24 @@ function finite_Cylinder_MPO(N_Φ::Int64, L_x::Float64, Vs::Array{Float64,1}, pr
                 return  generate_Hamiltonian(opt)
             end
         end
+    else
+        println("Neutralizing the background for the $(type) body term")
+        rough_N = N_Φ-2
+        test = rough_N
+            while rough_N <= test
+            rough_N = test + 2
+            coeff = Generate_Elements(rough_N, L_x, Vs, type)
+            coeff_bck = Neutralize_Backgroud(coeff, N_Φ, filling)
+            @show coeff_bck
+            opt = optimize_coefficients(coeff; prec=prec)
+            coeff_bck = optimize_coefficients(coeff_bck; prec=prec)
+            test = check_max_range_optimized_Hamiltonian(opt)
+            if rough_N > test
+
+                return  (generate_Hamiltonian(opt) + generate_Hamiltonian(coeff_bck))
+            end
+        end
+    end
     #sorted_opt = sort_by_configuration(opt);
 end;
 

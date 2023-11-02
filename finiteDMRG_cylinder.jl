@@ -18,14 +18,14 @@ end
 function LoadMPO(N_Φ::Int64, Ly::Float64, Vs::Vector{Float64}, prec::Float64, type::String, sites; forceReload=false)
     
     MPO_ = MPO()
-    nameSaving = "DMRG\\MPO\\MPO_N_phi($N_Φ)_Lx($Ly)_type($type)_Vs($Vs).jld2"
+    nameSaving = "DMRG\\Data\\MPO\\MPO_N_phi($N_Φ)_Lx($Ly)_type($type)_Vs($Vs).jld2"
     flag = isfile(nameSaving)
 
     if flag && !forceReload
         MPO_, sites = load(nameSaving, "MPO", "sites")
     else
         println("Calculating new MPO")
-        H = finite_Cylinder_MPO(N_Φ, Ly, Vs, prec, type)
+        H = finite_Cylinder_MPO(N_Φ, Ly, Vs, prec, type; NeutralizBackGround=true, filling = 1/2)
         MPO_ = MPO(H, sites)
         save(nameSaving, "MPO", MPO_, "sites", sites)
     end
@@ -39,7 +39,7 @@ function LoadMPS(
 
     ψ = MPS()
     
-    DirName = "DMRG\\MPS\\Type_($type)_Ne($Ne)_Ly($Ly).h5"
+    DirName = "DMRG\\Data\\MPS\\Type_($type)_Ne($Ne)_Ly($Ly).h5"
 
     if isfile(DirName) && !forceReload
         f = h5open(DirName, "r")
@@ -145,7 +145,7 @@ end
 function phase_transition(t, χ::Int64, MPO_2body, MPO_3body, sites, Ly)
     println("Calculating ground state for t=$t")
     Ne = Int64(length(sites)/2+1)
-    name = "DMRG/finite_Cylinder_MPS/t$(round(t, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
+    name = "DMRG/Data/finite_Cylinder_MPS/t$(round(t, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
 
     if isfile(name)
         E, ψ = load(name, "Energy", "psi")        
@@ -165,7 +165,7 @@ end
 function phase_transition_linear_pos(t, χ::Int64, MPO_2body, MPO_3body, sites, Ly)
     println("Calculating ground state for t=$t")
     Ne = Int64(length(sites)/2+1)
-    name = "DMRG/finite_Cylinder_MPS/Linear_pos_t$(round(t, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
+    name = "DMRG/Data/finite_Cylinder_MPS/Linear_pos_t$(round(t, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
 
     if isfile(name)
         E, ψ = load(name, "Energy", "psi")        
@@ -181,13 +181,32 @@ function phase_transition_linear_pos(t, χ::Int64, MPO_2body, MPO_3body, sites, 
     return E, ψ
 end
 
-function fidelity(t1::Float64, t2::Float64, Ly::Float64, sites)
+function phase_transition_linear_neg(t, χ::Int64, MPO_2body, MPO_3body, sites, Ly)
+    println("Calculating ground state for t=$t")
+    Ne = Int64(length(sites)/2+1)
+    name = "DMRG/Data/finite_Cylinder_MPS/Linear_neg_t$(round(t, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
+
+    if isfile(name)
+        E, ψ = load(name, "Energy", "psi")        
+        replace_siteinds!(ψ, sites)
+    else
+        ψ0 = productMPS(sites, patternPfaff)
+        MPO_Ham = -t*deepcopy(MPO_2body) + (1-t)*deepcopy(MPO_3body)
+        E, ψ = dmrg(MPO_Ham, ψ0; nsweeps=10, maxdim = χ, cutoff=1e-8, noise=1e-6)
+
+        save(name, "Energy", E, "psi", ψ)
+    end
+    return E, ψ
+end
+
+
+function fidelity(t1::Float64, t2::Float64, Ly::Float64, sites, tag)
 
     Ne = Int64(length(sites)/2+1)
-    name = "DMRG/finite_Cylinder_MPS/t$(round(t1, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
+    name = "DMRG/Data/finite_Cylinder_MPS/"*tag*"t$(round(t1, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
     _, ψ1 = load(name, "Energy", "psi")
     
-    name = "DMRG/finite_Cylinder_MPS/t$(round(t2, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
+    name = "DMRG/Data/finite_Cylinder_MPS/"*tag*"t$(round(t2, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
     _, ψ2 = load(name, "Energy", "psi")
     return abs(inner(ψ1', ψ2))
 end
@@ -197,13 +216,13 @@ end
 #################################
 
 
-function plot_fidelity(setT, setFi, Ne, Ly)
+function plot_fidelity(setT, setFi, Ne, Ly, tag)
     fig = plot()
     scatter!(fig, setT,  setFi, label= "fidelity")
     xlabel!("θ")
     ylabel!("<ψ|ψL>")
-    title!("fidelity for Ne=$(Ne) and Ly = $(Ly)")
-    vline!([n*pi/4 for n=1:1:8])
+    title!("fidelity for Ne=$(Ne) and Ly = $(Ly), $tag interpolation")
+    #vline!([n*pi/4 for n=1:1:8])
     display(fig)
 end;
 
@@ -241,7 +260,7 @@ end;
 #################################
 #################################
 
-function main(Ne::Int64, Lx::Float64, Nmin::Float64, Nmax::Float64, Nsteps::Int64)
+function main(Ne::Int64, Lx::Float64, Nmin::Float64, Nmax::Float64, Nsteps::Int64, TypeInterpol="trig")
 
     setT = LinRange(Nmin, Nmax, Nsteps+1)
     N_Φ = 2*(Ne-1)
@@ -250,8 +269,8 @@ function main(Ne::Int64, Lx::Float64, Nmin::Float64, Nmax::Float64, Nsteps::Int6
     println("Calculating the MPO")
     MPO_2body, sites = LoadMPO(N_Φ, Lx, [1.], 1e-9, "two", sites)
     MPO_3body, sites = LoadMPO(N_Φ, Lx, [0.; 0.; 1.], 1e-9, "three", sites)
-
-
+    
+    
     println("Calculating the GS for the Pfaffian 1/2")
     ψPf = Pfaffian(Ne,Lx, deepcopy(MPO_3body), sites)
     
@@ -259,29 +278,40 @@ function main(Ne::Int64, Lx::Float64, Nmin::Float64, Nmax::Float64, Nsteps::Int6
     setEPf = []
     setFi = []
 
+    signature_tag = ""
+    
     for t in setT
          
         χ = 250
-        
-        E, ψ = phase_transition(t, χ, MPO_2body, MPO_3body, sites, Lx)
-
+        E = 0
+        if TypeInterpol== "trig"
+            E, _ = phase_transition(t, χ, MPO_2body, MPO_3body, sites, Lx)
+        elseif TypeInterpol == "pos"
+            E, _ = phase_transition_linear_pos(t, χ, MPO_2body, MPO_3body, sites, Lx)
+            signature_tag = "Linear_pos_"
+        else
+            E, _ = phase_transition_linear_neg(t, χ, MPO_2body, MPO_3body, sites, Lx)
+            signature_tag = "Linear_neg_"
+        end
         push!(setEPf, E)
         
     end
 
     for index in 1:Nsteps
-        push!(setFi, fidelity(setT[index], setT[index+1], Lx, sites))
+        push!(setFi, fidelity(setT[index], setT[index+1], Lx, sites, signature_tag))
     end
 
     #plot_overlap(setT, setOPf, Ne, Lx)
 
-    plot_fidelity(setT[1:Nsteps], setFi, Ne, Lx)
+    plot_fidelity(setT[1:Nsteps], setFi, Ne, Lx, TypeInterpol)
 
     fig2 = plot()
     scatter!(fig2, setT,  setEPf, label ="Energy Pfaffian", xlabel="θ", ylabel = "E")
     title!("Energy for Ne=$(Ne) and Ly = $(Lx)")
-    vline!([n*pi/4 for n=1:1:8])
+    #vline!([n*pi/4 for n=1:1:8])
     display(fig2)
     #plot_entanglement(Entanglement(ψPf, Ne-1), "Entanglement for the pfaffian")
 
 end
+
+main(8, 8., 0., 2*pi, 20, "trig")
