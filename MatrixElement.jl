@@ -233,10 +233,6 @@ function three_body_elements(N_Φ, coeff, PseudoPot::Array{Float64})
             end
         end
     end
-    for key in keys(Coefficients)
-        #Coefficients[key] *= 0.2297194945741909
-        Coefficients[key] *= 1
-    end
     return Coefficients
 end;
 
@@ -276,7 +272,7 @@ function Generate_Elements(N_Φ, L_x, PseudoPot::Array{Float64}, type="two")
         @time Ham = two_body_elements(N_Φ, coeff, PseudoPot)
         return Ham
     elseif type == "three"
-        println("Creating The Hamiltonian")
+        println("Creating The Hamiltonian for 3 body interaction")
         @time Ham = three_body_elements(N_Φ, coeff, PseudoPot)
         return Ham
     else
@@ -453,12 +449,10 @@ function finite_Cylinder_MPO(N_Φ::Int64, L_x::Float64, Vs::Array{Float64,1}, pr
             rough_N = test + 2
             coeff = Generate_Elements(rough_N, L_x, Vs, type)
             coeff_bck = Neutralize_Backgroud(coeff, N_Φ, filling)
-            @show coeff_bck
             opt = optimize_coefficients(coeff; prec=prec)
             coeff_bck = optimize_coefficients(coeff_bck; prec=prec)
             test = check_max_range_optimized_Hamiltonian(opt)
             if rough_N > test
-
                 return  (generate_Hamiltonian(opt) + generate_Hamiltonian(coeff_bck))
             end
         end

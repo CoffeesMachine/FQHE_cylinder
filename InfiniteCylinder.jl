@@ -47,9 +47,9 @@ end;
 #################################
 
 
-function MPOTwoBody(s, Ly::Float64, Vs::Array{Float64}, tag::String; translator=nothing)
+function MPOTwoBody(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String; translator=nothing)
     
-    dir = "DMRG\\InfMPO\\InfMPO_2body\\"
+    dir = "DMRG\\Data\\InfMPO\\InfMPO_2body\\"
     name= "Ly$(Ly)_Vs$(Vs)_root$(tag).jld2"
 
     if isfile(dir*name)
@@ -59,16 +59,16 @@ function MPOTwoBody(s, Ly::Float64, Vs::Array{Float64}, tag::String; translator=
         model = Model("fqhe_2b_pot")
         model_params = (Ly = Ly, Vs = Vs, prec = 1e-10)
 
-        MPO_ = InfiniteMPOMatrix(model, s, translator; model_params...)
-        (H, L ,R), _,  = ITensorInfiniteMPS.compress_impo(MPO_, projection =  1, cutoff = 1e-10, verbose = true, max_iter = 500)
-        save(dir*name, "H", H, "L", L, "R", R)
+        MPO_ = InfiniteMPOMatrix(model, s, translator;  model_params...)
+        (H, L ,R), _, _  = ITensorInfiniteMPS.compress_impo(MPO_, projection =  1, cutoff = 1e-10, verbose = true, max_iter = 500)
+        #save(dir*name, "H", H, "L", L, "R", R)
         return H, L, R
     end
 end;   
 
-function MPOThreeBody(s, Ly::Float64, Vs::Array{Float64}, tag::String; translator=nothing)
+function MPOThreeBody(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String; translator=nothing)
     
-    dir = "DMRG\\InfMPO\\InfMPO_3body\\"
+    dir = "DMRG\\Data\\InfMPO\\InfMPO_3body\\"
     name = "Ly$(Ly)_Vs$(Vs)_root$(tag).jld2"
 
     if isfile(dir*name)
@@ -76,14 +76,13 @@ function MPOThreeBody(s, Ly::Float64, Vs::Array{Float64}, tag::String; translato
         return H, L, R
     else
         model = Model("fqhe_gen")
+        coeff = Generate_IdmrgCoeff(Ly, Vs; prec=1e-9, PHsym=false)
+        MPO1 = InfiniteMPOMatrix(model, s, translator; dict_coeffs=coeff)
 
-        coeff = Generate_IdmrgCoeff(Ly, Vs; prec=1e-8, PHsym=true)
-
-        MPO_ = InfiniteMPOMatrix(model, s, translator; dict_coeffs=coeff)
         println("Compressing the MPO")
-        (H, L ,R), _, _ = ITensorInfiniteMPS.compress_impo(MPO_, projection = 1, cutoff = 1e-10, verbose = true, max_iter = 500)
-        save(dir*name, "H", copy(H), "L", copy(L), "R", copy(R))
-        return H, L, R
+        (H, L ,R), _, _ = ITensorInfiniteMPS.compress_impo(MPO1, projection = 1, cutoff = 1e-8, verbose = true, max_iter = 500)
+        #save(dir*name, "H", copy(H), "L", copy(L), "R", copy(R))
+        return copy(H), L, R
     end
 end;
 
@@ -91,7 +90,6 @@ function add_MPO(MPO1, MPO2)
     
     H1, L1, R1 = MPO1
     H2, L2, R2 = MPO2
-
     #=
     sh1 = siteinds(H1)
     sh2 = siteinds(H2)
@@ -100,8 +98,6 @@ function add_MPO(MPO1, MPO2)
         replaceind!(H2[i], prime(sh1[i]), prime(sh2[i]))
     end
     =#
-    H1.data.data = a*H1.data.data
-    H2.Hmpo = b*H2.Hmpo
     H = H1 + H2
     
     L = Vector{ITensor}(undef, 4)
@@ -165,16 +161,28 @@ function MPO_unitcell(H, L, R, TargetSize::Int64, ψ)
     replacetags!(L[2], "Link,c=0,n=$(cellSize)", "Link,c=0,n=$(TargetSize)")
     R = R2
     newH = InfiniteMPOMatrix(newH, fermion_momentum_translater_four)
-    return newH, L, R2  
+    return newH, L, R  
 end;
 
 #################################
 #################################
 
+function mulitply(MPO1, λ::Float64)
 
-function Generate_FQHE_MPO(RootPattern::Vector{Int64}, Ly::Float64, Vs2body::Vector{Float64}, Vs3body::Vector{Float64}, mult_2b::Float64, mult_3b::Float64)
+    H, L, R = MPO1
+    R[2] = λ*R[2]
+    R[3] = λ*R[3]
 
-    GenericPath = "DMRG\\InfMPO\\"
+    L[1] = λ*L[1]
+    @show size(H)
+    #H[3, 3] = λ*H[3, 3]
+
+    return H, L, R
+end
+
+
+function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, Vs2body::Vector{Float64}, Vs3body::Vector{Float64})
+    GenericPath = "DMRG\\Data\\InfMPO\\"
 
     tag = ""
     if RootPattern == [2,2,1,1]
@@ -184,23 +192,17 @@ function Generate_FQHE_MPO(RootPattern::Vector{Int64}, Ly::Float64, Vs2body::Vec
     end
     
     CellSize = length(RootPattern)
+    #nameState = "\\States\\Ly$(Ly)_Vs2b_$(Vs2body)_Vs3b-$(Vs3body)_rootP-$(tag).jld2"
+    
+    s = generate_basic_FQHE_siteinds(CellSize, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_four)
+    #save(GenericPath*nameState, "S_two_sites", [deepcopy(s[1]), deepcopy(s[2])])
 
-    s2 = []
-    nameState = "\\States\\Ly$(Ly)_Vs2b_$(Vs2body)_Vs3b-$(Vs3body)_rootP-$(tag).jld2"
-    
-    if isfile(GenericPath*nameState)
-        s2data = load(GenericPath*nameState, "S_two_sites")
-        s2 = CelledVector(s2data, fermion_momentum_translater_two)
-    else 
-        s = generate_basic_FQHE_siteinds(CellSize, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_four)
-        save(GenericPath*nameState, "S_two_sites", [deepcopy(s[1]), deepcopy(s[2])])
-        s2 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
-    end
-    
+    s2 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
+    s3 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
     
     iMPO_3b = MPOThreeBody(s2, Ly, Vs3body, tag; translator=fermion_momentum_translater_two)
-    iMPO_2b = MPOTwoBody(s2, Ly, Vs2body, tag; translator=fermion_momentum_translater_two)
-    
+    iMPO_2b = MPOTwoBody(s3, Ly, Vs2body, tag; translator=fermion_momentum_translater_two)
+    iMPO_2b = mulitply(iMPO_2b, 0.)
     s = MPS_unitcell(s2)
 
     function initstate(n)
@@ -215,23 +217,13 @@ function Generate_FQHE_MPO(RootPattern::Vector{Int64}, Ly::Float64, Vs2body::Vec
     end
 
     ψ = InfMPS(s, initstate)
-
-    nameAddition = "\\Add_MPO\\Ly$(Ly)_Vs2b_$(Vs2body)_Vs3b-$(Vs3body)_mult2b-$(mult_2b)_mult3b-$(mult_3b)_rootP-$(tag).jld2"
-    if isfile(GenericPath*nameAddition)
-        H, L, R = load(GenericPath*nameAddition, "H", "L", "R")
-        
-        return H, L, R, ψ
-    else
-        H, L, R = add_MPO(iMPO_2b, iMPO_3b, mult_2b, mult_3b)
-        save(GenericPath*nameAddition, "H", H, "L", L, "R", R) 
+    H, L, R = add_MPO(iMPO_2b, iMPO_3b)
     
-        return H, L, R, ψ
-    end
-end 
-
-function Generate_DMRG_struct(H, L, R, ψ)
-    CellSize = nsites(H)
-    H, L, R = MPO_unitcell(H, L, R, CellSize, ψ)
+    
+    H, L, R = MPO_unitcell(copy(H), copy(L), copy(R), CellSize, ψ)
+    
+    
+    
     sp = siteinds(ψ)
     newH = copy(H)
 	temp_L = copy(L)
@@ -253,24 +245,14 @@ function Generate_DMRG_struct(H, L, R, ψ)
 	newH, newL, newR = ITensorInfiniteMPS.convert_impo(newH, copy(temp_L), copy(temp_R));
 
     dmrgStruc = iDMRGStructure(copy(ψ), newH, copy(newL), copy(newR), 2);
-end
-
-
-function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, Vs2body::Vector{Float64}, Vs3body::Vector{Float64}, mult_2b::Float64, mult_3b::Float64)
-
-    H, L, R, ψ = Generate_FQHE_MPO(RootPattern, Ly, Vs2body, Vs3body, mult_2b, mult_3b)
-
-    dmrgStruct = Generate_DMRG_struct(H, L, R, ψ)
-    
-    advance_environments(dmrgStruct, 10)
-    return dmrgStruct
+    return dmrgStruc
 end
 
 
 function Laughlin_struct(Ly::Float64, Vs::Vector{Float64})
     s = generate_basic_FQHE_siteinds(3, [2,1,1]; conserve_momentum=true, translator=fermion_momentum_translater_laugh)
 
-    H, L, R = MPOTwoBody(s, Ly, Vs; translator=fermion_momentum_translater_laugh, spec="Laugh")
+    H, L, R = MPOTwoBody(s, Ly, Vs, "erwhiu"; translator=fermion_momentum_translater_laugh)
 
     function initstate(n)
         if mod(n, 3) == 1
@@ -285,6 +267,53 @@ function Laughlin_struct(Ly::Float64, Vs::Vector{Float64})
     sp = siteinds(ψ)
     sh = siteinds(H)
     for x in 1:3
+        replaceind!(H[x], dag(sh[x]), dag(sp[x]))
+		replaceind!(H[x], prime(sh[x]), prime(sp[x]))
+    end
+
+    newH = copy(H)
+    # newH = InfiniteMPO(H)
+    temp_L = copy(L)
+	for j in 1:length(L)
+    	llink = only(commoninds(ψ.AL[0], ψ.AL[1]))
+    	temp_L[j] = temp_L[j] * δ(llink, dag(prime(llink)))
+	end
+	temp_R = copy(R)
+	for j in 1:length(R)
+    	rlink = only(commoninds(ψ.AR[nsites(ψ)+1], ψ.AR[nsites(ψ)]))
+    	temp_R[j] = temp_R[j] * δ(rlink, dag(prime(rlink)))
+	end
+	for j in 1:nsites(ψ)
+    	newH.data.data[j][end, 1] .+= -1*op("N", sp[j])
+	end
+
+	ITensorInfiniteMPS.fuse_legs!(newH, temp_L, temp_R)
+	newH, newL, newR = ITensorInfiniteMPS.convert_impo(newH, copy(temp_L), copy(temp_R));
+
+    dmrgStruc = iDMRGStructure(copy(ψ), newH, copy(newL), copy(newR), 2);
+    advance_environments(dmrgStruc, 10);
+    return dmrgStruc
+end
+
+
+function Pfaff_struct(Ly::Float64, Vs::Vector{Float64})
+    s = generate_basic_FQHE_siteinds(4, [2,2,1,1]; conserve_momentum=true, translator=fermion_momentum_translater_four)
+
+    H, L, R = MPOThreeBody(s, Ly, Vs, "erwdffsddfsdfu"; translator=fermion_momentum_translater_four)
+
+    function initstate(n)
+        if mod(n, 5) <= 2
+            return 2
+        else
+            return 1
+        end
+    end
+
+    ψ = InfMPS(s, initstate)
+
+    sp = siteinds(ψ)
+    sh = siteinds(H)
+    for x in 1:4
         replaceind!(H[x], dag(sh[x]), dag(sp[x]))
 		replaceind!(H[x], prime(sh[x]), prime(sp[x]))
     end

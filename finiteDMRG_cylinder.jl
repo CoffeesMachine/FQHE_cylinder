@@ -3,7 +3,6 @@ using Plots
 using ITensors.HDF5
 using FileIO
 using JLD2
-using Revise
 
 include("MatrixElement.jl")
 
@@ -208,7 +207,7 @@ function fidelity(t1::Float64, t2::Float64, Ly::Float64, sites, tag)
     
     name = "DMRG/Data/finite_Cylinder_MPS/"*tag*"t$(round(t2, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
     _, ψ2 = load(name, "Energy", "psi")
-    return abs(inner(ψ1', ψ2))
+    return abs(inner(ψ1, ψ2))
 end
 
 
@@ -314,4 +313,10 @@ function main(Ne::Int64, Lx::Float64, Nmin::Float64, Nmax::Float64, Nsteps::Int6
 
 end
 
-main(8, 8., 0., 2*pi, 20, "trig")
+
+#General diagram
+main(12, 10., 0., 2*pi, 50, "trig")
+#first phase transition 
+main(12, 10., 2.2, 2.5, 30, "trig")
+#second phase transition and end of the phase diagram 
+main(12, 10., 5., 6., 30, "trig")
