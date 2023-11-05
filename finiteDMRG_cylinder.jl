@@ -151,7 +151,6 @@ function phase_transition(t, χ::Int64, MPO_2body, MPO_3body, sites, Ly)
         replace_siteinds!(ψ, sites)
     else
         ψ0 = productMPS(sites, patternPfaff)
-        #MPO_Ham = t*deepcopy(MPO_2body) + (1-t)*deepcopy(MPO_3body)
         MPO_Ham = sin(t)*deepcopy(MPO_2body) + cos(t)*deepcopy(MPO_3body)
         E, ψ = dmrg(MPO_Ham, ψ0; nsweeps=10, maxdim = χ, cutoff=1e-8, noise=1e-6)
 
@@ -267,7 +266,7 @@ function main(Ne::Int64, Lx::Float64, Nmin::Float64, Nmax::Float64, Nsteps::Int6
 
     println("Calculating the MPO")
     MPO_2body, sites = LoadMPO(N_Φ, Lx, [1.], 1e-9, "two", sites)
-    MPO_3body, sites = LoadMPO(N_Φ, Lx, [0.; 0.; 1.], 1e-9, "three", sites)
+    MPO_3body, sites = LoadMPO(N_Φ, Lx, [0.; 0.; -1.], 1e-9, "three", sites)
     
     
     println("Calculating the GS for the Pfaffian 1/2")
@@ -285,6 +284,7 @@ function main(Ne::Int64, Lx::Float64, Nmin::Float64, Nmax::Float64, Nsteps::Int6
         E = 0
         if TypeInterpol== "trig"
             E, _ = phase_transition(t, χ, MPO_2body, MPO_3body, sites, Lx)
+            @show E
         elseif TypeInterpol == "pos"
             E, _ = phase_transition_linear_pos(t, χ, MPO_2body, MPO_3body, sites, Lx)
             signature_tag = "Linear_pos_"
@@ -315,7 +315,7 @@ end
 
 
 #General diagram
-main(12, 10., 0., 2*pi, 50, "trig")
+main(8, 10., 0., 2*pi, 50, "trig")
 #first phase transition 
 main(12, 10., 2.2, 2.5, 30, "trig")
 #second phase transition and end of the phase diagram 
