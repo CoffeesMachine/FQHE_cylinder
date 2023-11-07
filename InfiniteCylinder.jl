@@ -86,29 +86,6 @@ function MPOThreeBody(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::Str
     end
 end;
 
-function add_MPO(MPO1, MPO2, a)
-    
-    H1, L1, R1 = MPO1
-    H2, L2, R2 = MPO2
-
-    H = H1 + a*H2
-    
-    L = Vector{ITensor}(undef, 4)
-    L[1] = L1[1] + L2[1]; 
-    L[2] = L1[2]; 
-    L[3] = L2[2]; 
-    L[4] = L1[end];
-
-    R = Vector{ITensor}(undef, 4)
-    R[1] = R1[1]; 
-    R[2] = R1[2]; 
-    R[3] = R2[2]; 
-    R[4] = R1[end] + R2[end];
-
-    (newH, newL, newR), _, _ = ITensorInfiniteMPS.compress_impo(H; right_env = R, left_env = L, projection = 1, cutoff = 1e-10, verbose = true, max_iter = 500)
-    return newH, newL, newR
-end;
-
 #################################
 #################################
 
@@ -160,23 +137,19 @@ end;
 #################################
 #################################
 
-function Base.:*(λ::Float64, H::InfiniteMPOMatrix) 
-    for i in 1:length(H)
-        H[i][end,1] = λ*H[i][end,1]
-        H[i][3,2] = λ*H[i][3,2]
-    end
-    return H
-end
-
 function Base.:*(λ::Float64, A::Tuple{InfiniteMPOMatrix, Vector{ITensor}, Vector{ITensor}})
     H, L, R =  A
-    H1 = λ*H
-    #=
+    
+    for i in 1:nsites(H)
+        H[i][end,1] = λ*H[i][end,1]
+        H[i][2, 1] = λ*H[i][2, 1]
+    end
+    
     R[2] = λ*R[2]
     R[3] = λ*R[3]
     L[1] = λ*L[1]
-    =#
-    return (H1, L, R)
+    
+    return (H, L, R)
 end
 
 function Base.:+(A::Tuple{InfiniteMPOMatrix, Vector{ITensor}, Vector{ITensor}}, B::Tuple{InfiniteMPOMatrix, Vector{ITensor}, Vector{ITensor}})
