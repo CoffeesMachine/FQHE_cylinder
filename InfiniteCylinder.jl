@@ -4,7 +4,7 @@ using ITensors
 using FileIO
 using JLD2
 include("MatrixElement.jl");
-include("C:/Users/basil/Documents/EPFL/Master/MasterProject/Code/ITensorInfiniteMPS.jl/src/models/fqhe13.jl")
+include("/home/bmorier/DMRG/ITensorInfiniteMPS.jl/src/models/fqhe13.jl")
 
 
 function fermion_momentum_translater_laugh(i::Index, n::Int64; N=3)
@@ -234,97 +234,3 @@ function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, Vs2body::Vector{Flo
     advance_environments(dmrgStruct, 10)
     return dmrgStruct
 end
-
-
-function Laughlin_struct(Ly::Float64, Vs::Vector{Float64})
-    s = generate_basic_FQHE_siteinds(3, [2,1,1]; conserve_momentum=true, translator=fermion_momentum_translater_laugh)
-
-    H, L, R = MPOTwoBody(s, Ly, Vs, "erwhiu"; translator=fermion_momentum_translater_laugh)
-
-    function initstate(n)
-        if mod(n, 3) == 1
-            return 2
-        else
-            return 1
-        end
-    end
-
-    ψ = InfMPS(s, initstate)
-
-    sp = siteinds(ψ)
-    sh = siteinds(H)
-    for x in 1:3
-        replaceind!(H[x], dag(sh[x]), dag(sp[x]))
-		replaceind!(H[x], prime(sh[x]), prime(sp[x]))
-    end
-
-    newH = copy(H)
-    # newH = InfiniteMPO(H)
-    temp_L = copy(L)
-	for j in 1:length(L)
-    	llink = only(commoninds(ψ.AL[0], ψ.AL[1]))
-    	temp_L[j] = temp_L[j] * δ(llink, dag(prime(llink)))
-	end
-	temp_R = copy(R)
-	for j in 1:length(R)
-    	rlink = only(commoninds(ψ.AR[nsites(ψ)+1], ψ.AR[nsites(ψ)]))
-    	temp_R[j] = temp_R[j] * δ(rlink, dag(prime(rlink)))
-	end
-	for j in 1:nsites(ψ)
-    	newH.data.data[j][end, 1] .+= -1*op("N", sp[j])
-	end
-
-	ITensorInfiniteMPS.fuse_legs!(newH, temp_L, temp_R)
-	newH, newL, newR = ITensorInfiniteMPS.convert_impo(newH, copy(temp_L), copy(temp_R));
-
-    dmrgStruc = iDMRGStructure(copy(ψ), newH, copy(newL), copy(newR), 2);
-    advance_environments(dmrgStruc, 10);
-    return dmrgStruc
-end;
-
-
-function Pfaff_struct(Ly::Float64, Vs::Vector{Float64})
-    s = generate_basic_FQHE_siteinds(4, [2,2,1,1]; conserve_momentum=true, translator=fermion_momentum_translater_four)
-
-    H, L, R = MPOThreeBody(s, Ly, Vs, "erwdffsddfsdfu"; translator=fermion_momentum_translater_four)
-
-    function initstate(n)
-        if mod(n, 5) <= 2
-            return 2
-        else
-            return 1
-        end
-    end
-
-    ψ = InfMPS(s, initstate)
-
-    sp = siteinds(ψ)
-    sh = siteinds(H)
-    for x in 1:4
-        replaceind!(H[x], dag(sh[x]), dag(sp[x]))
-		replaceind!(H[x], prime(sh[x]), prime(sp[x]))
-    end
-
-    newH = copy(H)
-    # newH = InfiniteMPO(H)
-    temp_L = copy(L)
-	for j in 1:length(L)
-    	llink = only(commoninds(ψ.AL[0], ψ.AL[1]))
-    	temp_L[j] = temp_L[j] * δ(llink, dag(prime(llink)))
-	end
-	temp_R = copy(R)
-	for j in 1:length(R)
-    	rlink = only(commoninds(ψ.AR[nsites(ψ)+1], ψ.AR[nsites(ψ)]))
-    	temp_R[j] = temp_R[j] * δ(rlink, dag(prime(rlink)))
-	end
-	for j in 1:nsites(ψ)
-    	newH.data.data[j][end, 1] .+= -1*op("N", sp[j])
-	end
-
-	ITensorInfiniteMPS.fuse_legs!(newH, temp_L, temp_R)
-	newH, newL, newR = ITensorInfiniteMPS.convert_impo(newH, copy(temp_L), copy(temp_R));
-
-    dmrgStruc = iDMRGStructure(copy(ψ), newH, copy(newL), copy(newR), 2);
-    advance_environments(dmrgStruc, 10);
-    return dmrgStruc
-end;
