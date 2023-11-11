@@ -1,2 +1,5 @@
 Data/*
 .vscode/*
+logs/*
+DMRG/*
+DMRG/Data/InfMPO/InfMPO_2body/*

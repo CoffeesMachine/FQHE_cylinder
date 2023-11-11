@@ -1,0 +1,14 @@
+#!/bin/bash
+
+#SBATCH --job-name=IDMRG_CYL2
+#SBATCH --cpus-per-task=8
+#SBATCH --time=3-00:00:00
+#SBATCH --mem=50GB
+#SBATCH --qos=serial
+#SBATCH --output=logs/1010_%x_%a.o        
+#SBATCH --error=logs/1010_%x_%a.e         
+#SBATCH --ntasks=1
+
+mkdir -p logs
+
+OMP_NUM_THREADS=8 MKL_DYNAMIC=false julia cylinder_1010_0_2pi_20.jl "$@" 8.
