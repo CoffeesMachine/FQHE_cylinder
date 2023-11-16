@@ -43,7 +43,7 @@ function projector_local(n1, n2, κ, m::Int64)
         return common_factor*(
                             sqrt(3)*HermitePolynomial(κ*(n1 - n2)/sqrt(2), 1)
                             * HermitePolynomial(sqrt(3)*κ*(n1 + n2)/sqrt(2), 2)
-                            + HermitePolynomial(κ*(n1 - n2)/sqrt(2), 3)/sqrt(3)
+                            - HermitePolynomial(κ*(n1 - n2)/sqrt(2), 3)/sqrt(3)
                             )/8
     else 
         println("Error, the projector on this momentum subspace is not implemented yet")
@@ -119,6 +119,50 @@ function all_projectors(N_Φ, L_x, max_angular, type)
     end
 end
 
+function projectors_four_body(N_Φ, Lx, Ly)
+
+    prefactor = (sqrt(Lx/Ly)*(2*π/Ly)^4)/sqrt(N_Φ)
+    Coeff = Dict{Tuple{Int64, Int64, Int64}, Float64}()
+
+    for r in 0:3
+        iterators = (-4*N_Φ - r):4:(4*N_Φ - 1)
+        factorsExp = [exp((-2*π^2/Ly^2)*(k/4)^2) for k in iterators]
+
+        for (Indk, k) in enumerate(iterators)
+            for (Indq, q) in enumerate(iterators)
+                
+                k == q && continue
+                for (Indr, r) in enumerate(iterators)
+                    k == r && continue
+                    q == r && continue
+
+                    Coeff[(k, q, r)] = prefactor*W_polynomial(k/4, q/4, r/4, -k/4 -q/4 - r/4)*
+                    factorsExp[Indk]*factorsExp[Indq]*factorsExp[Indr]*
+                    exp((-2*π^2/Ly^2)*(k/4 + q/4 + r/4)^2)
+                end
+            end
+        end
+    end
+
+    return Coeff
+end
+
+function streamline_four_body(Dict, N_Φ)
+    coefficients = Dict{Tuple{Int64, Int64, Int64, Int64}, Float64}()
+
+    for n1 in 0:(N_Φ -4)
+        for n2 in (n1 + 1):(N_Φ - 3)
+            for n3 in (n2 + 1):(N_Φ -2)
+                for n4 in (n3 + 1):(N_Φ - 1)
+                    R = n1 + n2 + n3 + n4
+                    coefficients[(n1, n2, n3, n4)] = Dict[(R - 4*n1, R - 4*n2, R - 4*n3)]
+                end
+            end
+        end
+    end
+
+    return coefficients
+end
 #################################################################
 
 function two_body_elements(N_Φ, coeff, PseudoPot::Array{Float64})
@@ -253,6 +297,38 @@ function Neutralize_Backgroud(Coeff::Dict, N_Φ, v)
     return Background_coeff
 end
 
+
+function four_body_elements(N_Φ, Coeff::Dict; prec=1e-12)
+
+    Coeff4B = Dict()
+
+    #Center of mass
+
+    for R in 6:(4*N_Φ-10)
+        for n1 in max(0, R-3*N_Φ + 6):min(N_Φ -4, (R - 6)÷4)
+            for n2 in max(n1 + 1, R - n1 - 2*N_Φ + 3):min(N_Φ - 3, (R - n1 - 3)÷3)
+                for n3 in max(n2 + 1, R - n1 - n2 -N_Φ + 1):min(N_Φ - 2, (R - n1 - n2 -1)÷2)
+                    n4 = R - n1 - n2 - n3
+                    for m1 in max(0, R - 3*N_Φ + 6):min(N_Φ - 4, (R - 6)÷4)
+                        for m2 in max(m1 + 1, R - m1 - 2*N_Φ + 3):min(N_Φ - 3, (R - m1 - 3)÷3)
+                            for m3 in max(m2 + 1, R - m1 - m2 - N_Φ + 1):min(N_Φ - 2, (R - m1 - m2 - 1)÷2)
+                                m4 = R - m1 - m2 - m3
+
+                                element = Coeff[(n1, n2, n3, n4)]' * Coeff[(m1, m2, m3, m4)]
+                                if abs(elements) > prec
+                                    Coeff4B[[m_1, m_2, m_3, m_4, n_4, n_3, n_2, n_1]] = elements
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return Coeff4B
+end
+
 ###################################################################
 
 function Generate_Elements(N_Φ, L_x, PseudoPot::Array{Float64}, type="two")
@@ -282,7 +358,6 @@ function Generate_Elements(N_Φ, L_x, PseudoPot::Array{Float64}, type="two")
 end;
 
 
-
 function Generate_IdmrgCoeff(Ly::Float64, Vs::Array{Float64};prec=1e-8, PHsym=false)
     rough_N = round(Int64, 2*Ly)-2
     test = round(Int64, 2*Ly)-2
@@ -299,10 +374,63 @@ function Generate_IdmrgCoeff(Ly::Float64, Vs::Array{Float64};prec=1e-8, PHsym=fa
         end
     end
 end
+
+
+function Generate_4Body(; r::Float64=1.0, Lx::Float64=-1.0, Ly::Float64=-1.0, N_phi::Int64=10, prec=1e-12)
+    if Lx != -1
+        println("Generating 4body pseudopotential coefficients from Lx")
+        Ly = 2 * pi * N_phi / Lx
+        r = Lx / Ly
+    elseif Ly != -1
+        println("Generating 4body pseudopotential coefficients from Ly")
+        Lx = 2 * pi * N_phi / Ly
+        r = Lx / Ly
+    else
+        println("Generating 4body pseudopotential coefficients from r")
+        Lx = sqrt(2 * pi * N_phi * r)
+        Ly = sqrt(2 * pi * N_phi / r)
+    end
+    println(
+        string(
+          "Parameters are N_phi=",
+          N_phi,
+          ", r=",
+          round(r; digits=3),
+          ", Lx =",
+          round(Lx; digits=3),
+          " and Ly =",
+          round(Ly; digits=3),
+        ),
+    )
+
+    coeff = projectors_four_body(N_phi, Lx, Ly)
+    coeff = streamline_four_body(coeff, N_phi)
+
+    return four_body_elements(N_phi, coeff; prec=prec)
+end
+
+
+function Generate_Idmrg4body(Ly; prec=1e-10)
+    rough_N = round(Int64, 2*Ly)-2
+    test = round(Int64, 2*Ly)-2
+    while rough_N <= test
+        rough_N = test + 2
+        coeff = Generate_4Body(;Ly=Ly, N_phi=rough_N, prec=prec)
+
+        opt = optimize_coefficients(coeff; prec=prec, PHsym=false)
+        opt = filter_optimized_Hamiltonian_by_first_site(opt)
+        
+        test = check_max_range_optimized_Hamiltonian(opt)
+        if rough_N > test
+          return opt
+        end
+    end
+end
+
 ####################################
 ####################################
 ####################################
- 
+
 
 function HermitePolynomial(x, n::Int64)
 
@@ -473,3 +601,29 @@ function generate_Hamiltonian(coeff::Dict; global_factor=1, prec=1e-12)
     mpo = OpSum()
     return generate_Hamiltonian(mpo, coeff; global_factor=global_factor, prec=prec)
 end;
+
+function W_polynomial(ns...)
+  N = length(ns)
+  if N == 2
+    return ns[1] - ns[2]
+  end
+  if N == 1
+    return 0
+  end
+  res = 1
+  for j in 2:N
+    res *= (ns[1] - ns[j])
+  end
+  return res * W_polynomial(ns[2:end]...)
+end
+
+function W_polynomial(n1, n2)
+  return (n1 - n2)
+end
+function W_polynomial(n1, n2, n3)
+  return (n1 - n2) * (n1 - n3) * (n2 - n3)
+end
+
+function W_polynomial(n1, n2, n3, n4)
+  return (n1 - n2) * (n1 - n3) * (n1 - n4) * (n2 - n3) * (n2 - n4) * (n3 - n4)
+end
