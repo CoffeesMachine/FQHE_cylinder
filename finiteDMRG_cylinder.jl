@@ -184,7 +184,7 @@ function phase_transition_linear_neg(t, χ::Int64, MPO_2body, MPO_3body, sites, 
     Ne = Int64(length(sites)/2+1)
     name = "DMRG/Data/finite_Cylinder_MPS/Linear_neg_t$(round(t, digits=8))_Ly$(Ly)_Ne$(Ne).jld2"
 
-    if isfile(name)
+    if 1==2
         E, ψ = load(name, "Energy", "psi")        
         replace_siteinds!(ψ, sites)
     else
@@ -309,14 +309,14 @@ function main(Ne::Int64, Lx::Float64, Nmin::Float64, Nmax::Float64, Nsteps::Int6
     title!("Energy for Ne=$(Ne) and Ly = $(Lx)")
     #vline!([n*pi/4 for n=1:1:8])
     display(fig2)
-    #plot_entanglement(Entanglement(ψPf, Ne-1), "Entanglement for the pfaffian")
+    plot_entanglement(Entanglement(ψPf, Ne-1), "Entanglement for the pfaffian")
 
 end
 
 
 #General diagram
-main(8, 10., 0., 2*pi, 50, "trig")
+main(8, 10., 0., 2*pi, 20, "trig")
 #first phase transition 
-main(12, 10., 2.2, 2.5, 30, "trig")
+#main(12, 10., 2.2, 2.5, 30, "trig")
 #second phase transition and end of the phase diagram 
-main(12, 10., 5., 6., 30, "trig")
+#main(12, 10., 5., 6., 30, "trig")

@@ -6,8 +6,7 @@ using JLD2
 include("MatrixElement.jl");
 include("C:/Users/basil/Documents/EPFL/Master/MasterProject/Code/ITensorInfiniteMPS.jl/src/models/fqhe13.jl")
 
-
-function fermion_momentum_translater_laugh(i::Index, n::Int64; N=3)
+function fermion_momentum_translater_General(i::Index, n::Int64, N)
     ts = tags(i)
     translated_ts = translatecelltags(ts, n)
     new_i = replacetags(i, ts => translated_ts)
@@ -19,29 +18,24 @@ function fermion_momentum_translater_laugh(i::Index, n::Int64; N=3)
     return new_i
 end;
 
-function fermion_momentum_translater_two(i::Index, n::Int64; N=2)
-    ts = tags(i)
-    translated_ts = translatecelltags(ts, n)
-    new_i = replacetags(i, ts => translated_ts)
-    for j in 1:length(new_i.space)
-    ch = new_i.space[j][1][1].val
-    mom = new_i.space[j][1][2].val
-    new_i.space[j] = Pair(QN(("Nf", ch ), ("NfMom", mom + n*N*ch)),  new_i.space[j][2])
-    end
-    return new_i
-end;
+fermion_momentum_translater_laugh(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 3)
 
-function fermion_momentum_translater_four(i::Index, n::Int64; N=4)
-    ts = tags(i)
-    translated_ts = translatecelltags(ts, n)
-    new_i = replacetags(i, ts => translated_ts)
-    for j in 1:length(new_i.space)
-    ch = new_i.space[j][1][1].val
-    mom = new_i.space[j][1][2].val
-    new_i.space[j] = Pair(QN(("Nf", ch ), ("NfMom", mom + n*N*ch)),  new_i.space[j][2])
+fermion_momentum_translater_two(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 2)
+
+fermion_momentum_translater_four(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 4)
+
+#################################
+#################################
+
+function RootPattern_to_string(RootPattern::Vector{Int64})
+    s = ""
+    for el in RootPattern
+        s *= string(el-1)
     end
-    return new_i
-end;
+    
+    return s
+end
+
 
 #################################
 #################################
@@ -77,6 +71,7 @@ function MPOThreeBody(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::Str
     else
         model = Model("fqhe_gen")
         coeff = Generate_IdmrgCoeff(Ly, Vs; prec=1e-9, PHsym=false)
+        
         MPO1 = InfiniteMPOMatrix(model, s, translator; dict_coeffs=coeff)
 
         println("Compressing the MPO")
@@ -104,7 +99,7 @@ end;
 function MPO_unitcell(H, L, R, TargetSize::Int64, ψ)
     sp = siteinds(ψ)
     sh = siteinds(H)
-    
+    @show typeof(H)
     cellSize = nsites(H)
     @assert cellSize == 2
 
@@ -137,47 +132,9 @@ end;
 #################################
 #################################
 
-function Base.:*(λ::Float64, A::Tuple{InfiniteMPOMatrix, Vector{ITensor}, Vector{ITensor}})
-    H, L, R =  A
-    
-    for i in 1:nsites(H)
-        H[i][end,1] = λ*H[i][end,1]
-        H[i][2, 1] = λ*H[i][2, 1]
-    end
-    
-    R[2] = λ*R[2]
-    R[3] = λ*R[3]
-    L[1] = λ*L[1]
-    
-    return (H, L, R)
-end
-
-function Base.:+(A::Tuple{InfiniteMPOMatrix, Vector{ITensor}, Vector{ITensor}}, B::Tuple{InfiniteMPOMatrix, Vector{ITensor}, Vector{ITensor}})
-    H1, L1, R1 = A
-    H2, L2, R2 = B
-
-    H = H1 + H2
-    
-    L = Vector{ITensor}(undef, 4)
-    L[1] = L1[1] + L2[1]; 
-    L[2] = L1[2]; 
-    L[3] = L2[2]; 
-    L[4] = L1[end];
-
-    R = Vector{ITensor}(undef, 4)
-    R[1] = R1[1]; 
-    R[2] = R1[2]; 
-    R[3] = R2[2]; 
-    R[4] = R1[end] + R2[end];
-
-    (newH, newL, newR), _, _ = ITensorInfiniteMPS.compress_impo(H; right_env = R, left_env = L, projection = 1, cutoff = 1e-10, verbose = true, max_iter = 500)
-    return newH, newL, newR
-
-end
-
 function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, Vs2body::Vector{Float64}, Vs3body::Vector{Float64}, θ::Float64)
 
-    tag = RootPattern == [2,2,1,1] ? "11" : "10"
+    tag = RootPattern_to_string(RootPattern)
 
     CellSize = length(RootPattern)
    
@@ -236,13 +193,16 @@ function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, Vs2body::Vector{Flo
 end
 
 
-function Laughlin_struct(Ly::Float64, Vs::Vector{Float64})
-    s = generate_basic_FQHE_siteinds(3, [2,1,1]; conserve_momentum=true, translator=fermion_momentum_translater_laugh)
+function Laughlin_struct(Ly::Float64, Vs::Vector{Float64}, RootPattern::Vector{Int64})
+    s = generate_basic_FQHE_siteinds(3, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_laugh)
 
-    H, L, R = MPOTwoBody(s, Ly, Vs, "erwhiu"; translator=fermion_momentum_translater_laugh)
+    tag = RootPattern_to_string(RootPattern)
 
-    function initstate(n)
-        if mod(n, 3) == 1
+    H, L, R = MPOTwoBody(s, Ly, Vs, "Laughlin"*tag; translator=fermion_momentum_translater_laugh)
+
+
+    function initstate(n; pose_e=findmax(RootPattern)[2])
+        if mod(n, 3) == pose_e
             return 2
         else
             return 1
@@ -286,7 +246,7 @@ end;
 function Pfaff_struct(Ly::Float64, Vs::Vector{Float64})
     s = generate_basic_FQHE_siteinds(4, [2,2,1,1]; conserve_momentum=true, translator=fermion_momentum_translater_four)
 
-    H, L, R = MPOThreeBody(s, Ly, Vs, "erwdffsddfsdfu"; translator=fermion_momentum_translater_four)
+    H, L, R = MPOThreeBody(s, Ly, Vs, "Pfaffian"; translator=fermion_momentum_translater_four)
 
     function initstate(n)
         if mod(n, 5) <= 2

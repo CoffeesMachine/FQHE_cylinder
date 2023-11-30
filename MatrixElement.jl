@@ -147,6 +147,33 @@ function projectors_four_body(N_Φ, Lx, Ly)
     return Coeff
 end
 
+function projectors_four_body_parallel(Lx, Ly, N_Φ, maximalMoment::Int64; prec=1e-12)
+    prefactor = sqrt(Lx/Ly)*N_Φ*(2*pi/Ly)^5
+    coefficients = [Dict{Tuple{Int64, Int64, Int64}, Float64}() for n in 1:Threads.nthreads()]
+    for g = 0:3
+        expFactor = zeros(length(collect(-4*N_Φ-g:4:4*N_Φ-1)))
+        for (xk, k) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
+            expFactor[xk] = exp(-2*pi^2/Ly^2*(k/4)^2)
+        end
+        Threads.@threads for (xk, k) in collect(enumerate(-4*N_Φ-g:4:4*N_Φ-1))
+            for (xq, q) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
+                if k==q
+                    continue
+                end
+                for (xr, r) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
+                    if k==r || q==r
+                        continue
+                    end
+                    temp = prefactor*W_polynomial(k/4, q/4, r/4, -k/4-q/4-r/4)*expFactor[xk]*expFactor[xq]*
+                                    expFactor[xr]*exp(-2*pi^2/Ly^2*(k/4+ q/4 + r/4)^2)
+                    coefficients[Threads.threadid()][(k, q, r)]=temp
+                end
+            end
+        end
+    end
+    return merge(coefficients...)
+end
+
 function streamline_four_body(Dict, N_Φ)
     coefficients = Dict{Tuple{Int64, Int64, Int64, Int64}, Float64}()
 
@@ -297,7 +324,6 @@ function Neutralize_Backgroud(Coeff::Dict, N_Φ, v)
     return Background_coeff
 end
 
-
 function four_body_elements(N_Φ, Coeff::Dict; prec=1e-12)
 
     Coeff4B = Dict()
@@ -328,6 +354,51 @@ function four_body_elements(N_Φ, Coeff::Dict; prec=1e-12)
     
     return Coeff4B
 end
+
+
+function four_body_elements_parallel(basis, coeff, N_phi; type="Complex", global_sign = 1)
+    if type == "Complex"
+        ham = zeros(ComplexF64, length(basis), length(basis))
+    elseif type == "Real"
+        ham = zeros(Float64, length(basis), length(basis))
+    else
+        println("Wrong type, defaulting to complex")
+        ham = zeros(ComplexF64, length(basis), length(basis))
+    end
+    build_hamiltonian_from_four_body_factorized_streamlined_dictionary_parallel!(ham, basis, coeff, N_phi, type=type, global_sign = global_sign)
+    return ham
+end
+
+
+function build_hamiltonian_from_four_body_factorized_streamlined_dictionary_parallel!(ham, basis, coeff, N_phi; type="Complex", global_sign = 1)
+    Threads.@threads for (idx_basis, x) in collect(enumerate(basis))
+        for R4 =6:4N_phi-10  #Barycenter
+            for n_1 in max(0, R4 - 3N_phi + 6):min(N_phi-4, (R4-6)÷4)
+                for n_2 in max(n_1+1, R4 - n_1 - 2N_phi + 3):min(N_phi-3, (R4 - n_1 - 3)÷3)
+                    for n_3 in max(n_2+1, R4 - n_1 - n_2 - N_phi + 1):min(N_phi-2, (R4 -n_1 - n_2 -1)÷2)
+                        n_4 = R4 - n_1 - n_2 - n_3
+                        for m_1 in max(0, R4 - 3N_phi + 6):min(N_phi-4, (R4-6)÷4)
+                            for m_2 in max(m_1+1, R4 - m_1 - 2N_phi + 3):min(N_phi-3, (R4 - m_1 - 3)÷3)
+                                for m_3 in max(m_2+1, R4 - m_1 - m_2 - N_phi + 1):min(N_phi-2, (R4 -m_1 - m_2 -1)÷2)
+                                    m_4 = R4 - m_1 - m_2 - m_3
+                                    idxz = searchsortedfirst(basis, z)
+                                    if idxz <= length(basis) && basis[idxz]==z
+                                        if type == "Real"
+                                            ham[idxz, idx_basis] +=  real(global_sign * flip * flip2 *(coeff[n_1, n_2, n_3, n_4]'*coeff[m_1, m_2, m_3, m_4]))
+                                        else
+                                            ham[idxz, idx_basis] +=  global_sign *(coeff[n_1, n_2, n_3, n_4]'*coeff[m_1, m_2, m_3, m_4])
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 
 ###################################################################
 
@@ -410,21 +481,12 @@ function Generate_4Body(; r::Float64=1.0, Lx::Float64=-1.0, Ly::Float64=-1.0, N_
 end
 
 
-function Generate_Idmrg4body(Ly; prec=1e-10)
-    rough_N = round(Int64, 2*Ly)-2
-    test = round(Int64, 2*Ly)-2
-    while rough_N <= test
-        rough_N = test + 2
-        coeff = Generate_4Body(;Ly=Ly, N_phi=rough_N, prec=prec)
+function Generate_Idmrg4body(Coeffs; prec=1e-10)
 
-        opt = optimize_coefficients(coeff; prec=prec, PHsym=false)
-        opt = filter_optimized_Hamiltonian_by_first_site(opt)
-        
-        test = check_max_range_optimized_Hamiltonian(opt)
-        if rough_N > test
-          return opt
-        end
-    end
+    opt = optimize_coefficients(Coeffs;prec=prec)
+    opt = filter_optimized_Hamiltonian_by_first_site(opt)
+
+    return generate_Hamiltonian(opt)
 end
 
 ####################################
@@ -559,7 +621,7 @@ end
 function finite_Cylinder_MPO(N_Φ::Int64, L_x::Float64, Vs::Array{Float64,1}, prec::Float64, type::String; NeutralizBackGround::Bool=false, filling::Float64=1/2)
     if !NeutralizBackGround ||  type=="three"
         rough_N = N_Φ-2
-        test = rough_N
+        test = N_Φ-2
             while rough_N <= test
             rough_N = test + 2
             coeff = Generate_Elements(rough_N, L_x, Vs, type)
@@ -572,7 +634,7 @@ function finite_Cylinder_MPO(N_Φ::Int64, L_x::Float64, Vs::Array{Float64,1}, pr
     else
         println("Neutralizing the background for the $(type) body term")
         rough_N = N_Φ-2
-        test = rough_N
+        test = N_Φ-2
             while rough_N <= test
             rough_N = test + 2
             coeff = Generate_Elements(rough_N, L_x, Vs, type)
