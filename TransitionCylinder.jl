@@ -1,6 +1,7 @@
 using Revise
 using ITensors
 using ITensorInfiniteMPS
+
 using FileIO
 using JLD2
 using Statistics
@@ -44,8 +45,9 @@ function LoadData(Ly, Settheta,  chi, noise, RootPattern, maxiters, Chimax)
         
         name  = "RootPattern$(RootPattern)_chiMax$(Chimax)_Ly$(Ly)_theta$(round(theta, digits=5))_maxiters$(maxiters)_chi$(chi)_noise$(noise).jld2"
         openName = path*name
+
         @show round(theta, digits=5)
-        if !isfile(openName)
+        #=if !isfile(openName)
             println("try")
             name = "RootPattern$(RootPattern)_chiMax$(Chimax)_Ly$(Ly)_theta$(round(round(theta, digits=5)+1e-5, digits=5))_maxiters$(maxiters)_chi$(chi)_noise$(noise).jld2"
             if !isfile(path*name)
@@ -54,6 +56,7 @@ function LoadData(Ly, Settheta,  chi, noise, RootPattern, maxiters, Chimax)
             end
             openName = path*name
         end
+        =#
             
         jldopen(openName, "r") do file
             setPsi[ind] = file["dmrgStruct"]
@@ -146,7 +149,8 @@ function plotFidelity(idmrgStruct, setTheta, chi, Ly; savefig=true)
     xlabel!("θ")
     ylabel!("fidelity")
     title!("Fidelity for Ly =$(Ly) and Chi = $(chi)")
-    #vline!([n*pi/4 for n=3:4:8])
+    vline!([n*pi/4 for n=7])
+    vline!([n*pi/2 for n=3])
 
     
     if savefig
@@ -161,10 +165,10 @@ end
 
 function main()
 
-    chi = 2048
-    chimax = 2048
-    Ly = 8.
-    setθ = LinRange(0, 2*pi, 20)
+    chi = 1024
+    chimax = 1024
+    Ly = 9.
+    setθ =LinRange(4.5, 2*pi+0.5, 40)
     D = LoadData(Ly, setθ, chi, 0., "1100", 100, chimax)
 
     PlotEnergy(D["Energy"], setθ, chi, Ly; savefig=true)

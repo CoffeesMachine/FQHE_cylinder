@@ -195,14 +195,14 @@ end
 
 function Laughlin_struct(Ly::Float64, Vs::Vector{Float64}, RootPattern::Vector{Int64})
     s = generate_basic_FQHE_siteinds(3, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_laugh)
-
+    @show s
     tag = RootPattern_to_string(RootPattern)
 
     H, L, R = MPOTwoBody(s, Ly, Vs, "Laughlin"*tag; translator=fermion_momentum_translater_laugh)
 
 
     function initstate(n; pose_e=findmax(RootPattern)[2])
-        if mod(n, 3) == pose_e
+        if mod(n, 3) == mod(pose_e, 3)
             return 2
         else
             return 1
@@ -243,16 +243,69 @@ function Laughlin_struct(Ly::Float64, Vs::Vector{Float64}, RootPattern::Vector{I
 end;
 
 
-function Pfaff_struct(Ly::Float64, Vs::Vector{Float64})
-    s = generate_basic_FQHE_siteinds(4, [2,2,1,1]; conserve_momentum=true, translator=fermion_momentum_translater_four)
+function Laughlin_struct(Ly::Float64, Vs::Vector{Float64}, RootPattern::Vector{Int64}, LeftEnv, RightEnv)
+    s = generate_basic_FQHE_siteinds(3, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_laugh)
 
-    H, L, R = MPOThreeBody(s, Ly, Vs, "Pfaffian"; translator=fermion_momentum_translater_four)
+    tag = RootPattern_to_string(RootPattern)
 
-    function initstate(n)
-        if mod(n, 5) <= 2
+    H, _, _ = MPOTwoBody(s, Ly, Vs, "Laughlin"*tag; translator=fermion_momentum_translater_laugh)
+
+
+    function initstate(n; pose_e=findmax(RootPattern)[2])
+        if mod(n, 3) == mod(pose_e, 3)
             return 2
         else
             return 1
+        end
+    end
+
+    ψ = InfMPS(s, initstate)
+
+    sp = siteinds(ψ)
+    sh = siteinds(H)
+    for x in 1:3
+        replaceind!(H[x], dag(sh[x]), dag(sp[x]))
+		replaceind!(H[x], prime(sh[x]), prime(sp[x]))
+    end
+
+    newH = copy(H)
+    # newH = InfiniteMPO(H)
+    temp_L = copy(LeftEnv)
+	for j in 1:length(LeftEnv)
+    	llink = only(commoninds(ψ.AL[0], ψ.AL[1]))
+    	temp_L[j] = temp_L[j] * δ(llink, dag(prime(llink)))
+	end
+	temp_R = copy(RightEnv)
+	for j in 1:length(RightEnv)
+    	rlink = only(commoninds(ψ.AR[nsites(ψ)+1], ψ.AR[nsites(ψ)]))
+    	temp_R[j] = temp_R[j] * δ(rlink, dag(prime(rlink)))
+	end
+	for j in 1:nsites(ψ)
+    	newH.data.data[j][end, 1] .+= -1*op("N", sp[j])
+	end
+
+	ITensorInfiniteMPS.fuse_legs!(newH, temp_L, temp_R)
+	newH, newL, newR = ITensorInfiniteMPS.convert_impo(newH, copy(temp_L), copy(temp_R));
+
+    dmrgStruc = iDMRGStructure(copy(ψ), newH, copy(newL), copy(newR), 2);
+    advance_environments(dmrgStruc, 10);
+    return dmrgStruc
+end;
+
+
+function Pfaff_struct(Ly::Float64, RootPattern::Vector{Int64})
+    s = generate_basic_FQHE_siteinds(4, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_four)
+
+    H, L, R = MPOThreeBody(s, Ly, [0., 0., 1.], RootPattern_to_string(RootPattern); translator=fermion_momentum_translater_four)
+
+    function initstate(n)
+        if RootPattern == [2,2,1,1]
+            return mod(n, 5) <= 2 ? 2 : 1
+        elseif RootPattern == [2,1,2,1]
+            return mod(n, 2) == 1 ? 2 : 1
+        else
+            println("Pattern not implemented yet")
+            return -1
         end
     end
 

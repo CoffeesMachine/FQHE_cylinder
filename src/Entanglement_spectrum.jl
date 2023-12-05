@@ -5,10 +5,12 @@ using ITensorInfiniteMPS
 using LaTeXStrings
 using Plots
 
-function compute_entanglement_spectrum(C::ITensor, ind::Index{Vector{Pair{QN, Int64}}}; prec = 1e-20, nb_qn = 2)
+include("InfiniteCylinder.jl")
+
+function compute_entanglement_spectrum(C::ITensor, ind::Index{Vector{Pair{QN, Int64}}}; prec = 1e-12, nb_qn = 2)
     entanglement_spectrum = Dict()
     n=1
-    U, S, V = svd(C, ind)
+    _, S, _ = svd(C, ind)
     temp = inds(S)[1]
     for xind in temp.space
         local_ent = Float64[]
@@ -55,14 +57,14 @@ function Sector_Entanglement_Spectrum(Spec::Dict, N::Int64)
     return DictRet
 end
 
-function plot_entanglement_spectrum(EntSpec::Dict, N::Int64, Ly::Float64, chi::Int64)
+function plot_entanglement_spectrum(EntSpec::Dict, N::Int64, Ly::Float64, chi::Int64, RootPattern::Vector{Int64})
     EntSpec = Sector_Entanglement_Spectrum(EntSpec, N)
     
     
     fig = plot()
-    scatter!(fig, EntSpec["K"], EntSpec["Eta"], marker=:hline, markersize=10, linewidth=4, color="red")
+    scatter!(fig, EntSpec["K"], EntSpec["Eta"], marker=:hline, markersize=10, linewidth=4, color="red", label = "RP : $(RootPattern_to_string(RootPattern))")
     xlabel!(L"K")
-    ylabel!(L"$\eta$")
-    title!("Entanglement spectrum in the N=$(N) sector for Ly=$(round(Ly, digits=3)) and Chi=$(chi)", titlefont = font(10,"Computer Modern"))
+    ylabel!(L"$\xi$")
+    title!("Entanglement spectrum in the N=$(N) sector for Ly=$(round(Ly, digits=3)) and χ=$(chi)", titlefont = font(8,"Computer Modern"))
     display(fig)
 end
