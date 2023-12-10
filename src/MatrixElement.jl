@@ -17,7 +17,6 @@ function projector_local(n, κ, m::Int64)
     return (2/pi)^(0.25)*sqrt(κ)*exp(-(κ*n)^2)*HermitePolynomial(sqrt(2)*κ*n, m)/sqrt(2^m*factorial(m))
 end
 
-
 function projector_local(n1, n2, κ, m::Int64)
     #=
     This function generates the coefficients of the matrix element for the cylinder for three body interaction

@@ -1,0 +1,17 @@
+q = 3
+Lmin = 10.
+Lmax = 20.
+NL = 15
+chiM = 400
+chiMin = 100
+chiMax = 500
+tag = Laughlin
+prec = 1e-10
+ener_tol = 1e-8
+ent_tol = 1e-8
+maxIter = 50
+save_every = 2
+Nt = 400
+Ncell = 10
+FluxX = 3.141592653589793
+FluxY = 0.

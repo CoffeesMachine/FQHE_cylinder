@@ -167,9 +167,12 @@ function main()
 
     chi = 1024
     chimax = 1024
-    Ly = 9.
-    setθ =LinRange(4.5, 2*pi+0.5, 40)
-    D = LoadData(Ly, setθ, chi, 0., "1100", 100, chimax)
+    Ly = 10.
+    setθ = LinRange(-1.5, 1.5, 40)
+
+    RP = "1010"
+
+    D = LoadData(Ly, setθ, chi, 0., RP, 100, chimax)
 
     PlotEnergy(D["Energy"], setθ, chi, Ly; savefig=true)
 
