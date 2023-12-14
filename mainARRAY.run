@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#SBATCH --job-name=DT_test
+#SBATCH --cpus-per-task=4
+#SBATCH --time=3-00:00:00
+#SBATCH --mem=28GB
+#SBATCH --qos=serial
+#SBATCH --output=logs/%x_%a.o        
+#SBATCH --error=logs/%x_%a.e         
+#SBATCH --ntasks=1
+#SBATCH --array=2-40
+
+
+mkdir -p logs
+
+OMP_NUM_THREADS=1 MKL_DYNAMIC=true julia TestDehnTwist.jl "$SLURM_ARRAY_TASK_ID" #parameters

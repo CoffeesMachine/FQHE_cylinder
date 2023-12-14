@@ -43,7 +43,7 @@ function projector_local(n1, n2, κ, m::Int64)
         return common_factor*(
                             sqrt(3)*HermitePolynomial(κ*(n1 - n2)/sqrt(2), 1)
                             * HermitePolynomial(sqrt(3)*κ*(n1 + n2)/sqrt(2), 2)
-                            + HermitePolynomial(κ*(n1 - n2)/sqrt(2), 3)/sqrt(3)
+                            - HermitePolynomial(κ*(n1 - n2)/sqrt(2), 3)/sqrt(3)
                             )/8
     else 
         println("Error, the projector on this momentum subspace is not implemented yet")
@@ -119,6 +119,49 @@ function all_projectors(N_Φ, L_x, max_angular, type)
     end
 end
 
+function projectors_four_body_parallel(Lx, Ly, N_Φ; prec=1e-12)
+    prefactor = sqrt(Lx / Ly) / sqrt(N_Φ) * (2 * pi / Ly)^4
+    coefficients = [Dict{Tuple{Int64, Int64, Int64}, Float64}() for n in 1:Threads.nthreads()]
+    for g = 0:3
+        expFactor = zeros(length(collect(-4*N_Φ-g:4:4*N_Φ-1)))
+        for (xk, k) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
+            expFactor[xk] = exp(-2*pi^2/Ly^2*(k/4)^2)
+        end
+        Threads.@threads for (xk, k) in collect(enumerate(-4*N_Φ-g:4:4*N_Φ-1))
+            for (xq, q) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
+                if k==q
+                    continue
+                end
+                for (xr, r) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
+                    if k==r || q==r
+                        continue
+                    end
+                    temp = prefactor*W_polynomial(k/4, q/4, r/4, -k/4-q/4-r/4)*expFactor[xk]*expFactor[xq]*
+                                    expFactor[xr]*exp(-2*pi^2/Ly^2*(k/4+ q/4 + r/4)^2)
+                    coefficients[Threads.threadid()][(k, q, r)]=temp
+                end
+            end
+        end
+    end
+    return merge(coefficients...)
+end
+
+function streamline_four_body(DictE, N_Φ)
+    Coeff = Dict()
+
+    for n1 in 0:(N_Φ -4)
+        for n2 in (n1 + 1):(N_Φ - 3)
+            for n3 in (n2 + 1):(N_Φ -2)
+                for n4 in (n3 + 1):(N_Φ - 1)
+                    R = n1 + n2 + n3 + n4
+                    Coeff[(n1, n2, n3, n4)] = DictE[(R - 4*n1, R - 4*n2, R - 4*n3)]
+                end
+            end
+        end
+    end
+
+    return Coeff
+end
 #################################################################
 
 function two_body_elements(N_Φ, coeff, PseudoPot::Array{Float64})
@@ -253,6 +296,43 @@ function Neutralize_Backgroud(Coeff::Dict, N_Φ, v)
     return Background_coeff
 end
 
+
+function four_body_elements_parallel(N_Φ, Coeff::Dict; prec=1e-12)
+
+    Coeff4B = Dict()
+
+    #Center of mass
+
+    for R in 6:(4*N_Φ-10)
+        for n1 in max(0, R-3*N_Φ + 6):min(N_Φ -4, (R - 6)÷4)
+            for n2 in max(n1 + 1, R - n1 - 2*N_Φ + 3):min(N_Φ - 3, (R - n1 - 3)÷3)
+                for n3 in max(n2 + 1, R - n1 - n2 -N_Φ + 1):min(N_Φ - 2, (R - n1 - n2 -1)÷2)
+                    n4 = R - n1 - n2 - n3
+                    for m1 in max(0, R - 3*N_Φ + 6):min(N_Φ - 4, (R - 6)÷4)
+                        for m2 in max(m1 + 1, R - m1 - 2*N_Φ + 3):min(N_Φ - 3, (R - m1 - 3)÷3)
+                            for m3 in max(m2 + 1, R - m1 - m2 - N_Φ + 1):min(N_Φ - 2, (R - m1 - m2 - 1)÷2)
+                                m4 = R - m1 - m2 - m3
+
+                                elements = Coeff[(n1, n2, n3, n4)]' * Coeff[(m1, m2, m3, m4)]
+                                if abs(elements) > prec
+                                    if haskey(Coeff4B, [m1, m2, m3, m4, n4, n3, n2, n1])
+                                        Coeff4B[[m1, m2, m3, m4, n4, n3, n2, n1]] += elements
+                                    else
+                                        Coeff4B[[m1, m2, m3, m4, n4, n3, n2, n1]] = elements
+                                
+                                    end    
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return Coeff4B
+end
+
 ###################################################################
 
 function Generate_Elements(N_Φ, L_x, PseudoPot::Array{Float64}, type="two")
@@ -280,6 +360,56 @@ function Generate_Elements(N_Φ, L_x, PseudoPot::Array{Float64}, type="two")
         return nothing
     end
 end;
+
+function Generate_4Body(; r::Float64=1.0, Lx::Float64=-1.0, Ly::Float64=-1.0, N_phi::Int64=10, prec=1e-12)
+    if Lx != -1
+        println("Generating 4body pseudopotential coefficients from Lx")
+        Ly = 2 * pi * N_phi / Lx
+        r = Lx / Ly
+    elseif Ly != -1
+        println("Generating 4body pseudopotential coefficients from Ly")
+        Lx = 2 * pi * N_phi / Ly
+        r = Lx / Ly
+    else
+        println("Generating 4body pseudopotential coefficients from r")
+        Lx = sqrt(2 * pi * N_phi * r)
+        Ly = sqrt(2 * pi * N_phi / r)
+    end
+    println(
+        string(
+          "Parameters are N_phi=",
+          N_phi,
+          ", r=",
+          round(r; digits=3),
+          ", Lx =",
+          round(Lx; digits=3),
+          " and Ly =",
+          round(Ly; digits=3),
+        ),
+    )
+
+    coeff = projectors_four_body_parallel(Lx, Ly, N_phi)
+    coeff = streamline_four_body(coeff, N_phi)
+
+    return four_body_elements_parallel(N_phi, coeff; prec=prec)
+end
+
+
+function Generate_Idmrg4body(Coeffs; prec=1e-10)
+    AllCoeff = [Dict{Vector{Int64}, Float64}() for i=1:length(collect(keys(Coeffs)))]
+    i = 1
+    for (k, v) in Coeffs
+        AllCoeff[i] = v
+    end
+    
+    Coeffs = merge(AllCoeff...)
+    @show typeof(Coeffs)
+    opt = optimize_coefficients(Coeffs;prec=prec)
+    opt = filter_optimized_Hamiltonian_by_first_site(opt)
+
+    return opt
+end
+
 
 
 
@@ -328,6 +458,37 @@ function HermitePolynomial(x, n::Int64)
 
 end;
 
+function W_polynomial(ns...)
+    N = length(ns)
+    
+    if N == 2
+        return ns[1] - ns[2]
+    end
+    
+    if N == 1
+        return 0
+    end
+    
+    res = 1
+    
+    for j in 2:N
+        res *= (ns[1] - ns[j])
+    end
+    
+    return res * W_polynomial(ns[2:end]...)
+end
+  
+function W_polynomial(n1, n2)
+    return (n1 - n2)
+end
+
+function W_polynomial(n1, n2, n3)
+    return (n1 - n2) * (n1 - n3) * (n2 - n3)
+end
+  
+function W_polynomial(n1, n2, n3, n4)
+    return (n1 - n2) * (n1 - n3) * (n1 - n4) * (n2 - n3) * (n2 - n4) * (n3 - n4)
+end
 
 function wellOrderdedSet(m1, m2, m3)
     gloablsign= 1
@@ -414,11 +575,21 @@ function filter_optimized_Hamiltonian_by_first_site(coeff::Dict; n=1)
     end
     return res
 end;
+
+function filter_optimized_Hamiltonian_by_first_siteOld(coeff::Dict; n=0)
+    res = Dict()
+    for (k, v) in coeff
+      if k[1] == n
+        res[k] = v
+      end
+    end
+    return res
+end;
   
-function check_max_range_optimized_Hamiltonian(coeff::Dict)
+function check_max_range_optimized_Hamiltonian(coeff::Dict; check=2)
     temp = 0
     for k in keys(coeff)
-      temp = max(temp, k[end] - k[2])
+      temp = max(temp, k[end] - k[check])
     end
     return temp
 end

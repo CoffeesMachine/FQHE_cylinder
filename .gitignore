@@ -3,3 +3,5 @@ Data/*
 logs/*
 DMRG/*
 DMRG/Data/InfMPO/InfMPO_2body/*
+archives/*
+ParametersFiles/*

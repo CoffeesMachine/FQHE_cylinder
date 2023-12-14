@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#SBATCH --job-name=DT_test
+#SBATCH --cpus-per-task=6
+#SBATCH --time=3-00:00:00
+#SBATCH --mem=50GB
+#SBATCH --qos=serial
+#SBATCH --output=logs/%x_%a.o        
+#SBATCH --error=logs/%x_%a.e         
+#SBATCH --ntasks=1
+
+
+
+mkdir -p logs
+
+OMP_NUM_THREADS=1 MKL_DYNAMIC=true julia main.jl "$@" #parameters
