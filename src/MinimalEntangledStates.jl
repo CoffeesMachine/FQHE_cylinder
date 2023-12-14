@@ -8,7 +8,7 @@ include("InfiniteCylinder.jl")
 
 function idmrgLoop(RootPattern::Vector{Int64}, Ly::Float64, tag::String, θ::Float64; setχ::Vector{Int64}, V2b::Vector{Float64}, V3b::Vector{Float64}, prec::Float64, kwargs...)
     
-    println("Calulating for L=$(L)")
+    println("Calulating for L=$(Ly)")
     
     dmrgStruct = FQHE_idmrg(RootPattern, Ly, θ; V2b=V2b, V3b=V3b, prec=prec)
 
@@ -20,7 +20,7 @@ function idmrgLoop(RootPattern::Vector{Int64}, Ly::Float64, tag::String, θ::Flo
 end
 
 
-function idmrgLoop(dmrgStruct, path, setχ; ener_tol, ent_tol, alphas, maxIter, save_every)
+function idmrgLoop(dmrgStruct, path, setχ; ener_tol, ent_tol, alphas, maxIter, save_every, kwargs...)
    
     for χ in setχ
         println("Starting chi = $χ")

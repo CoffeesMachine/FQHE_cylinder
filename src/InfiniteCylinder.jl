@@ -75,7 +75,7 @@ function GenMPO(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String, t
     else
         model = type=="two" ? Model("fqhe_2b_pot") : Model("fqhe_gen")
 
-        infMPO = InfiniteMPOMatrix(model, s, translator;  model_params...)
+        infMPO = type == "three" ? InfiniteMPOMatrix(model, s, translator;  dict_coeffs= model_params) : InfiniteMPOMatrix(model, s, translator; model_params...) 
         (H, L ,R), _, _  = ITensorInfiniteMPS.compress_impo(infMPO, projection =  1, cutoff = 1e-10, verbose = true, max_iter = 500)
         save(dir*name, "H", H, "L", L, "R", R)
         return H, L, R
@@ -163,7 +163,7 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
     s2 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
 
     params_3b = (dict_coeffs = Generate_IdmrgCoeff(Ly, V3b; prec=prec, PHsym=false))
-    params_2b = (Ly = Ly, Vs = Vs, prec = prec)
+    params_2b = (Ly = Ly, Vs = V2b, prec = prec)
 
     iMPO_3b = GenMPO(s2, Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; translator=fermion_momentum_translater_two)
     iMPO_2b = GenMPO(s3, Ly, V2b, RootPattern_to_string(RootPattern), "two", params_2b; translator=fermion_momentum_translater_two)
@@ -215,7 +215,7 @@ function InfCylinderStruct(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64,
     if length(RootPattern) == 3
         return GenerateBasicStructure(RootPattern, Ly, V2b, prec=prec)
     else
-        return GenerateBasicStructure(RootPattern, Ly, θ, V3b, V3b; prec=prec)
+        return GenerateBasicStructure(RootPattern, Ly, θ, V2b, V3b; prec=prec)
     end
 end
 
@@ -225,6 +225,14 @@ function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64; V2b::V
     
     sp = siteinds(ψ)
     newH = copy(H)
+    so = siteinds(newH)
+
+    for n in 1:4
+        replaceind!(newH[n], dag(so[n]), dag(sp[n]))
+        replaceind!(newH[n], prime(so[n]), prime(sp[n]))
+    end
+
+
 	temp_L = copy(L)
 	for j in 1:length(L)
     	llink = only(commoninds(ψ.AL[0], ψ.AL[1]))

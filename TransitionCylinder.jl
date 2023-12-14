@@ -165,12 +165,12 @@ end
 
 function main()
 
-    chi = 1024
+    chi = 512
     chimax = 1024
-    Ly = 10.
+    Ly = 11.
     setθ = LinRange(-1.5, 1.5, 40)
 
-    RP = "1010"
+    RP = "1100"
 
     D = LoadData(Ly, setθ, chi, 0., RP, 100, chimax)
 

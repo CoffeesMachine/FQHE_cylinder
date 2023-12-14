@@ -1,7 +1,9 @@
+using MKL
 using Revise
 using ITensors
 using ITensorInfiniteMPS
 using Plots
+
 
 using LinearAlgebra
 using LaTeXStrings
@@ -35,7 +37,7 @@ function readInputFile(filename, theta)
 
     alphas = [1e-8, 0.0]
 
-    qt = vars["tag"]=="Laughlin" ? 3 : 2
+    qt = vars["tag"]=="Laughlin" ? 3 : 4
 
     kwargs = (
         setRP=setRP,
@@ -57,7 +59,7 @@ function readInputFile(filename, theta)
         Φx = vars["FluxX"], 
         Φy = vars["FluxY"],
         q = qt,
-        Ne_unitCell = qt == 2 ? 2 : 1
+        Ne_unitCell = qt == 4 ? 2 : 1
     )
 
    return kwargs
@@ -76,9 +78,12 @@ function run()
 
     path = "DMRG/Data/$(kwargs[5])Infinite/DehnTwist/" 
 
-    filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[6]).jld2"
+    filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[15])_Flux$(round(kwargs[17], digits=5)).jld2"
+    #filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[6]).jld2"
+    
     nameDehnTwist = path*filename
     BerryPhaseD = Dict()
+    
     if isfile(nameDehnTwist)
         BerryPhaseD = load(nameDehnTwist, "dict twist")
     else
@@ -86,7 +91,26 @@ function run()
         save(nameDehnTwist, "dict twist", BerryPhaseD)
     end
 
-    @show BerryPhaseD
+    #=
+    for (k,v) in BerryPhaseD
+        BerryPhaseD[k] = v[7:13]
+    end
+    =#
+    setL = collect(setL)
+
+    ll = setfit(setL, BerryPhaseD)
+    @show (ll[1], ll[2])
+    @show (ll[3], ll[4])
+    
+    @show ll[1]-ll[3]
+    @show ll[1]-ll[5]
+    setX = setL.*setL
+    fig = plot()
+    scatter!(fig,setX, BerryPhaseD[[2,1,1]], marker=:dot, color="red", label="rp : 100")
+    scatter!(fig, setX, BerryPhaseD[[1,2,1]], marker=:0, color="blue", label="rp : 010")
+    scatter!(fig, setX, BerryPhaseD[[1,1,2]], marker=:diamond, color="green", label="rp : 001")
+
+    display(fig)
 end
 
 run()
