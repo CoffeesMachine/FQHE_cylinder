@@ -32,7 +32,7 @@ function topologicalShift(RootPattern::Vector{Int64})
 end
 
 
-function BerryPhase(rp::Vector{Int64}, L::Float64, W; χ::Int64, θ::Float64, tag::String, Ncell::Int64, Nτ::Int64, kwargs...)
+function BerryPhase(rp::Vector{Int64}, L::Float64; χ::Int64, θ::Float64, tag::String, Ncell::Int64, Nτ::Int64, kwargs...)
 
 
     path = "DMRG/Data/$(tag)Infinite/"
@@ -48,17 +48,15 @@ function BerryPhase(rp::Vector{Int64}, L::Float64, W; χ::Int64, θ::Float64, ta
     dmrgStruct = load(path*"MES/"*name, "dmrgStruct")
     ψ = dmrgStruct.ψ    
     
-    return DehnTwist(ψ, Nτ, Ncell, shift, path*"BlockMPS/Ncell$(Ncell)_"*name, W; kwargs...)
+    return DehnTwist(ψ, Ncell, shift, path*"BlockMPS/Ncell$(Ncell)_"*name, L; kwargs...)
 end
 
 function BerryPhase(rp::Vector{Int64}; setL::LinRange{Float64, Int64}, kwargs...)
     
     setBerryPhase = []
-    W = nothing
     for L in setL
-        @show W
       
-        el, W = BerryPhase(rp, L, W; kwargs...)
+        el, W = BerryPhase(rp, L; kwargs...)
         append!(setBerryPhase, el)
     end
 
@@ -74,15 +72,17 @@ function BerryPhase(;setRP::Vector{Vector{Int64}}, kwargs...)
 
         println("\n####################################\n          Root pattern : $(RootPattern_to_string(rp))   \n####################################\n")
         flush(stdout)
-        
+        #=
         name = "DMRG/Data/LaughlinInfinite/test/frp$(RootPattern_to_string(rp))_Flux$(round(kwargs[16], digits=5)).jld2"
         el = []
         if isfile(name)
             el = load(name, "berry")
         else
-            el = BerryPhase(rp; kwargs...)
+            
             save(name, "berry", el)
         end
+        =#
+        el = BerryPhase(rp; kwargs...)
         DictB[rp] = el
 
     end
