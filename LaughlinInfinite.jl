@@ -61,10 +61,18 @@ function readInputFile(filename, theta)
         q = qt,
         Ne_unitCell = qt == 4 ? 2 : 1
     )
-
+ 
    return kwargs
 end
 
+function RootPattern_to_string(RootPattern::Vector{Int64}; first_term="")
+    s = ""
+    for el in RootPattern
+        s *= string(el-1)
+    end
+    s *= first_term
+    return s
+end
 
 
 function run()
@@ -78,7 +86,7 @@ function run()
 
     path = "DMRG/Data/$(kwargs[5])Infinite/DehnTwist/" 
 
-    filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[15])_Flux$(round(kwargs[17], digits=5)).jld2"
+    filename = "W_DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[15])_Flux$(round(kwargs[17], digits=5)).jld2"
     #filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[6]).jld2"
     
     nameDehnTwist = path*filename
@@ -107,7 +115,7 @@ function run()
     setX = setL.*setL
     fig = plot()
     scatter!(fig,setX, BerryPhaseD[[2,1,1]], marker=:dot, color="red", label="rp : 100")
-    scatter!(fig, setX, BerryPhaseD[[1,2,1]], marker=:0, color="blue", label="rp : 010")
+    scatter!(fig, setX, BerryPhaseD[[1,2,1]], marker=:utriangle, color="blue", label="rp : 010")
     scatter!(fig, setX, BerryPhaseD[[1,1,2]], marker=:diamond, color="green", label="rp : 001")
 
     display(fig)
@@ -154,3 +162,53 @@ function plotBerryphase(Lmax)
     println("h_0 - c/24 = ", fit100[1]/2)
 end
 =#
+function runPfaff()
+    setRP = [[2,2,1,1], [2,1,2,1]]
+    path = "DMRG/Data/PfaffianInfinite/"
+    BerryPhaseD = Dict()
+    for rp in setRP
+        filename = "DT_rp$(RootPattern_to_string(rp))_Lmin11.0_Lmax17.0_step7_chi512_Ncell10_Flux0.0.jld2"
+        #filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[6]).jld2"
+
+        nameDehnTwist = path*filename
+        
+        el = load(nameDehnTwist, "dict twist")
+        vec = []
+        if rp == [2,2,1,1]
+            
+            vec = el[rp][1:6] 
+            @show vec
+            for ind in 1:6
+                @show ind
+                if ind == 1 || ind == 4
+                    @show vec[ind]
+                    vec[ind] = vec[ind] + 1
+                    @show vec[ind]
+                end
+            end
+            @show vec
+        else
+            vec = el[rp][1:6]
+        end
+        BerryPhaseD[rp] = vec
+    end
+
+    
+
+    setL = collect(LinRange(11., 16., 6))
+
+    ll = setfit(setL, BerryPhaseD)
+    @show (ll[1], ll[2])
+    @show (ll[3], ll[4])
+
+    @show ll[1]-ll[3]
+    setX = setL.*setL
+    fig = plot()
+    scatter!(fig,setX, BerryPhaseD[[2,2,1,1]], marker=:dot, color="red", label="rp : 1100")
+    scatter!(fig, setX, BerryPhaseD[[2,1,2,1]], marker=:diamond, color="blue", label="rp : 1010")
+
+    display(fig)
+end
+    
+
+runPfaff()
