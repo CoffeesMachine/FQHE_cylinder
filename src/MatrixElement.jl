@@ -2,6 +2,9 @@ using FileIO
 using JLD2
 using ITensors
 
+##############
+#  two body  #
+##############
 
 function projector_local(n, κ, m::Int64)
     #=
@@ -16,42 +19,6 @@ function projector_local(n, κ, m::Int64)
     =#
     return (2/pi)^(0.25)*sqrt(κ)*exp(-(κ*n)^2)*HermitePolynomial(sqrt(2)*κ*n, m)/sqrt(2^m*factorial(m))
 end
-
-
-function projector_local(n1, n2, κ, m::Int64)
-    #=
-    This function generates the coefficients of the matrix element for the cylinder for three body interaction
-    Inputs : 
-                n1 : first quantum number linked to momentum
-                n2 : second quantum number linked to momentum
-                κ : (2π/L) the aspect ratio in the periodic direction (taken to be x here)
-                m : relative angular momentum
-    Return :
-                The coefficient associated to these parameters according to 
-                the reference "https://arxiv.org/pdf/1606.05353.pdf"
-    =#
-    common_factor = κ*(3/pi^2)^0.25*exp(-(n1^2 + n2^2 + n1*n2)*κ*κ)
-    if m==0 
-        return common_factor
-    elseif m == 1
-        return 0
-    elseif m==2
-        return 0
-        #return common_factor*0.25*(HermitePolynomial(κ*(n1 - n2)/sqrt(2), 2) 
-         #                       + HermitePolynomial(sqrt(3)*κ*(n1 + n2)/sqrt(2), 2))
-    elseif m==3
-        return common_factor*(
-                            sqrt(3)*HermitePolynomial(κ*(n1 - n2)/sqrt(2), 1)
-                            * HermitePolynomial(sqrt(3)*κ*(n1 + n2)/sqrt(2), 2)
-                            - HermitePolynomial(κ*(n1 - n2)/sqrt(2), 3)/sqrt(3)
-                            )/8
-    else 
-        println("Error, the projector on this momentum subspace is not implemented yet")
-        return nothing
-    end
-
-
-end;
 
 
 function all_projector_two_body(N_Φ, L_x, max_angular)
@@ -87,82 +54,6 @@ function all_projector_two_body(N_Φ, L_x, max_angular)
     return coeff
 end; 
 
-function all_projector_three_bodies(N_Φ, L_x, max_angular)
-    coeff = Dict{Tuple{Float64, Float64}, Array{Float64,1}}()
-    
-    # For fermions, only odd values matter
-    set_m = 1:max_angular
-    for r1 in -N_Φ:1/3:(N_Φ)
-        for r2 in -(N_Φ):1/3:(N_Φ)
-
-            r1 = round(r1, digits=3)
-            r2 = round(r2, digits=3)
-
-            coeff[(r1, r2)] = zeros(Float64, length(set_m))
-
-            for (index_m, m) in enumerate(set_m)
-                coeff[(r1, r2)][index_m] += (projector_local(r1, r2, 2*pi/L_x, m) - projector_local(r2, r1, 2*pi/L_x, m))/2
-            end
-        end
-    end
-    return coeff
-end;
-
-function all_projectors(N_Φ, L_x, max_angular, type)
-    if type=="two"
-        return all_projector_two_body(N_Φ, L_x, max_angular)
-    elseif type == "three"
-        return all_projector_three_bodies(N_Φ, L_x, max_angular)
-    else
-        println("Interaction unknown")
-        return nothing
-    end
-end
-
-function projectors_four_body_parallel(Lx, Ly, N_Φ; prec=1e-12)
-    prefactor = sqrt(Lx / Ly) / sqrt(N_Φ) * (2 * pi / Ly)^4
-    coefficients = [Dict{Tuple{Int64, Int64, Int64}, Float64}() for n in 1:Threads.nthreads()]
-    for g = 0:3
-        expFactor = zeros(length(collect(-4*N_Φ-g:4:4*N_Φ-1)))
-        for (xk, k) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
-            expFactor[xk] = exp(-2*pi^2/Ly^2*(k/4)^2)
-        end
-        Threads.@threads for (xk, k) in collect(enumerate(-4*N_Φ-g:4:4*N_Φ-1))
-            for (xq, q) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
-                if k==q
-                    continue
-                end
-                for (xr, r) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
-                    if k==r || q==r
-                        continue
-                    end
-                    temp = prefactor*W_polynomial(k/4, q/4, r/4, -k/4-q/4-r/4)*expFactor[xk]*expFactor[xq]*
-                                    expFactor[xr]*exp(-2*pi^2/Ly^2*(k/4+ q/4 + r/4)^2)
-                    coefficients[Threads.threadid()][(k, q, r)]=temp
-                end
-            end
-        end
-    end
-    return merge(coefficients...)
-end
-
-function streamline_four_body(DictE, N_Φ)
-    Coeff = Dict()
-
-    for n1 in 0:(N_Φ -4)
-        for n2 in (n1 + 1):(N_Φ - 3)
-            for n3 in (n2 + 1):(N_Φ -2)
-                for n4 in (n3 + 1):(N_Φ - 1)
-                    R = n1 + n2 + n3 + n4
-                    Coeff[(n1, n2, n3, n4)] = DictE[(R - 4*n1, R - 4*n2, R - 4*n3)]
-                end
-            end
-        end
-    end
-
-    return Coeff
-end
-#################################################################
 
 function two_body_elements(N_Φ, coeff, PseudoPot::Array{Float64})
     #=
@@ -229,73 +120,243 @@ function two_body_elements(N_Φ, coeff, PseudoPot::Array{Float64})
 end;
 
 
-function three_body_elements(N_Φ, coeff, PseudoPot::Array{Float64})
-    Coefficients = Dict()
-
-    for j in 1/3:1/3:(N_Φ-1-1/3)
-        for r3 in -N_Φ+j:1:N_Φ-j 
-            for r4 in -N_Φ+j:1:N_Φ-j 
-                
-                m1 = round(Int64, j+r3)
-                m2 = round(Int64, j+r4)
-                m3 = round(Int64, j-r4-r3)
-
-                if m1 == m2 || m2 == m3 || m3 == m1 || m3 < 0  || m2 < 0  || m1 < 0 || m1 > N_Φ-1  || m2 > N_Φ-1 || m3 > N_Φ-1 
-                    continue
-                end
-                
-                m1, m2, m3, antisym_1 = wellOrderdedSet(m1, m2, m3)
-                m1, m2, m3 = m3, m2, m1
-                for r1 in -N_Φ+j:1:N_Φ-j 
-                    for r2 in -N_Φ+j:1:N_Φ-j 
-    
-                        n1 = round(Int64, j+r1)
-                        n2 = round(Int64, j+r2)
-                        n3 = round(Int64, j-r2-r1)
-                       
-        
-                        if n1 == n2 || n2 == n3 || n3 == n1 || n3 < 0 || n2 <0 || n1 < 0 || n1 > N_Φ-1  || n2 > N_Φ-1 || n3 > N_Φ-1 
-                            continue
-                        end
-        
-                        n1, n2, n3, antisym_2 = wellOrderdedSet(n1, n2, n3)
-
-                        r1t = round(r1, digits=3)
-                        r2t = round(r2, digits=3)
-                        r3t = round(r3, digits=3)
-                        r4t = round(r4, digits=3)
-                        
-                        
-                        if haskey(Coefficients, [n1, n2, n3, m1, m2, m3])
-                            Coefficients[[n1, n2, n3, m1, m2, m3]] += antisym_1*antisym_2*sum([(coeff[(r1t, r2t)][x] * PseudoPot[x] * coeff[(r3t, r4t)][x])/6 for x in 1:length(PseudoPot)])
-                        else
-                            Coefficients[[n1, n2, n3, m1, m2, m3]] = antisym_1*antisym_2*sum([(coeff[(r1t, r2t)][x] * PseudoPot[x] * coeff[(r3t, r4t)][x])/6 for x in 1:length(PseudoPot)])
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return Coefficients
-end;
-
-function Neutralize_Backgroud(Coeff::Dict, N_Φ, v)
-    Background_coeff = Dict()
-    for n in 0:(N_Φ-2)
-        for m in n:N_Φ-1
-            if haskey(Coeff, [n, m, m, n])
-                if !haskey(Background_coeff, [n,n])
-                    Background_coeff[[n, n]] = -v*Coeff[[n, m, m, n]]
-                else
-                    Background_coeff[[n, n]] += -v*Coeff[[n, m, m, n]]
-                end
-            end
-        end
-    end
-
-    return Background_coeff
+function all_projectors(N_Φ, L_x, max_angular)
+    return all_projector_two_body(N_Φ, L_x, max_angular)
 end
 
+function Generate_Elements(N_Φ, L_x, PseudoPot::Array{Float64}, type="two")
+    println("Parameters of the Hamiltonians are")
+    @show N_Φ
+    @show L_x
+    @show PseudoPot
+
+
+    max_angular = length(PseudoPot)
+
+
+    coeff = all_projectors(N_Φ, L_x, max_angular, type)
+
+
+    if type=="two"
+        @time Ham = two_body_elements(N_Φ, coeff, PseudoPot)
+        return Ham
+    else
+        println("Unkown type of interaction choose between <<two>> or <<three>>")
+        return nothing
+    end
+end;
+
+
+################
+#  three body  #
+################
+
+function build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=1e-12)
+    coefficients = Dict{Tuple{Int64,Int64},Float64}()
+    for g in 0:2
+      for (k, q) in Iterators.product((-3N_phi - g):3:(3N_phi - 1), (-3N_phi - g):3:(3N_phi - 1))
+        coefficients[(k, q)] =
+          sqrt(Lx / Ly) / sqrt(N_phi) *
+          (2 * pi / Ly)^3 *
+          W_polynomial(k / 3, q / 3, -k / 3 - q / 3) *
+          exp(-2 * pi^2 / Ly^2 * ((k / 3)^2 + (q / 3)^2 + (-k / 3 - q / 3)^2))
+      end
+    end
+    return coefficients
+end
+  
+
+function build_three_body_coefficient_factorized_torus(Lx, Ly, N_phi, maximalMoment::Int64; prec=1e-12)
+    coefficients = Dict{Tuple{Int64, Int64}, Float64}()
+    nmax=15
+    for g = 0:2
+        for (k, q) = Iterators.product(-3N_phi-g:3:3N_phi-1, -3N_phi-g:3:3N_phi-1)
+             temp = 0.
+            for (n_1, n_2) = Iterators.product(-nmax:nmax, -nmax:nmax)
+                temp+= sqrt(Lx/Ly)/sqrt(N_phi)*(2*pi/Ly)^3 * W_polynomial(k/3 + n_1*N_phi, q/3+n_2*N_phi, -k/3-q/3-(n_1+n_2)*N_phi)*exp(-2*pi^2/Ly^2*( (k/3 + n_1*N_phi)^2 + (q/3 + n_2*N_phi)^2 + (-k/3 - q/3 - (n_1+ n_2)*N_phi)^2 ) )
+            end
+            coefficients[(k, q)] = temp/sqrt(0.07216878367598695)
+        end
+    end
+    return coefficients
+end
+  
+function streamline_three_body_dictionnary_cylinder(dic, N_phi)
+    coefficients = Dict{Tuple{Int64,Int64,Int64},Float64}()
+    for n_1 in 0:(N_phi - 3)
+      for n_2 in (n_1 + 1):(N_phi - 2)
+        for n_3 in (n_2 + 1):(N_phi - 1)
+          R3 = n_1 + n_2 + n_3
+          coefficients[(n_1, n_2, n_3)] = dic[(R3 - 3n_1, R3 - 3n_2)]
+        end
+      end
+    end
+    return coefficients
+end
+  
+function build_hamiltonian_from_three_body_factorized_streamlined_dictionary(
+    coeff, N_phi; global_sign=1, prec=1e-12
+  )
+    full_coeff = Dict{Array{Int64,1},Float64}()
+    for R3 in 3:(3N_phi - 3)  #Barycenter
+      for n_1 in max(0, R3 - 2N_phi + 3):min(N_phi - 3, R3 ÷ 3 - 1)
+        for n_2 in max(n_1 + 1, R3 - n_1 - N_phi + 1):min(N_phi - 2, (R3 - n_1 - 1) ÷ 2)
+          n_3 = R3 - n_1 - n_2
+          for m_1 in max(0, R3 - 2N_phi + 3):min(N_phi - 3, R3 ÷ 3 - 1)
+            for m_2 in max(m_1 + 1, R3 - m_1 - N_phi + 1):min(N_phi - 2, (R3 - m_1 - 1) ÷ 2)
+              m_3 = mod(R3 - m_1 - m_2, N_phi)
+              temp = global_sign * (coeff[n_1, n_2, n_3]' * coeff[m_1, m_2, m_3])
+              if abs(temp) > prec
+                full_coeff[[m_1, m_2, m_3, n_3, n_2, n_1]] = temp
+              end
+            end
+          end
+        end
+      end
+    end
+    return full_coeff
+end
+  
+function build_three_body_pseudopotentials(;
+    r::Float64=1.0,
+    Lx::Float64=-1.0,
+    Ly::Float64=-1.0,
+    N_phi::Int64=10,
+    prec=1e-12,
+    global_sign=1,
+  )
+    if Lx != -1
+      println("Generating 3body pseudopotential coefficients from Lx")
+      Ly = 2 * pi * N_phi / Lx
+      r = Lx / Ly
+    elseif Ly != -1
+      println("Generating 3body pseudopotential coefficients from Ly")
+      Lx = 2 * pi * N_phi / Ly
+      r = Lx / Ly
+    else
+      println("Generating 3body pseudopotential coefficients from r")
+      Lx = sqrt(2 * pi * N_phi * r)
+      Ly = sqrt(2 * pi * N_phi / r)
+    end
+    println(
+      string(
+        "Parameters are N_phi=",
+        N_phi,
+        ", r=",
+        round(r; digits=3),
+        ", Lx =",
+        round(Lx; digits=3),
+        " and Ly =",
+        round(Ly; digits=3),
+      ),
+    )
+    coeff = build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=prec)
+    coeff = streamline_three_body_dictionnary_cylinder(coeff, N_phi)
+    return build_hamiltonian_from_three_body_factorized_streamlined_dictionary(
+      coeff, N_phi; global_sign=global_sign, prec=prec
+    )
+end
+
+
+
+function Generate_IdmrgCoeff(Ly::Float64, Vs::Array{Float64};prec=1e-8, PHsym=false)
+    rough_N = round(Int64, 2*Ly)-2
+    test = round(Int64, 2*Ly)-2
+    while rough_N <= test
+        rough_N = test + 2
+        coeff = build_three_body_pseudopotentials(;N_phi=rough_N, Ly=Ly, prec=prec)
+
+        opt = optimize_coefficients(coeff; prec=prec, PHsym=PHsym)
+        opt = filter_optimized_Hamiltonian_by_first_site(opt)
+        
+        test = check_max_range_optimized_Hamiltonian(opt)
+        if rough_N > test
+          return opt
+        end
+    end
+end
+
+################
+#  four body  #
+################
+
+
+function Generate_4Body(; r::Float64=1.0, Lx::Float64=-1.0, Ly::Float64=-1.0, N_phi::Int64=10, prec=1e-12)
+    if Lx != -1
+        println("Generating 4body pseudopotential coefficients from Lx")
+        Ly = 2 * pi * N_phi / Lx
+        r = Lx / Ly
+    elseif Ly != -1
+        println("Generating 4body pseudopotential coefficients from Ly")
+        Lx = 2 * pi * N_phi / Ly
+        r = Lx / Ly
+    else
+        println("Generating 4body pseudopotential coefficients from r")
+        Lx = sqrt(2 * pi * N_phi * r)
+        Ly = sqrt(2 * pi * N_phi / r)
+    end
+    println(
+        string(
+          "Parameters are N_phi=",
+          N_phi,
+          ", r=",
+          round(r; digits=3),
+          ", Lx =",
+          round(Lx; digits=3),
+          " and Ly =",
+          round(Ly; digits=3),
+        ),
+    )
+
+    coeff = projectors_four_body_parallel(Lx, Ly, N_phi)
+    coeff = streamline_four_body(coeff, N_phi)
+
+    return four_body_elements_parallel(N_phi, coeff; prec=prec)
+end
+
+function projectors_four_body_parallel(Lx, Ly, N_Φ; prec=1e-12)
+    prefactor = sqrt(Lx / Ly) / sqrt(N_Φ) * (2 * pi / Ly)^4
+    coefficients = [Dict{Tuple{Int64, Int64, Int64}, Float64}() for n in 1:Threads.nthreads()]
+    for g = 0:3
+        expFactor = zeros(length(collect(-4*N_Φ-g:4:4*N_Φ-1)))
+        for (xk, k) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
+            expFactor[xk] = exp(-2*pi^2/Ly^2*(k/4)^2)
+        end
+        Threads.@threads for (xk, k) in collect(enumerate(-4*N_Φ-g:4:4*N_Φ-1))
+            for (xq, q) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
+                if k==q
+                    continue
+                end
+                for (xr, r) in enumerate(-4*N_Φ-g:4:4*N_Φ-1)
+                    if k==r || q==r
+                        continue
+                    end
+                    temp = prefactor*W_polynomial(k/4, q/4, r/4, -k/4-q/4-r/4)*expFactor[xk]*expFactor[xq]*
+                                    expFactor[xr]*exp(-2*pi^2/Ly^2*(k/4+ q/4 + r/4)^2)
+                    coefficients[Threads.threadid()][(k, q, r)]=temp
+                end
+            end
+        end
+    end
+    return merge(coefficients...)
+end
+
+function streamline_four_body(DictE, N_Φ)
+    Coeff = Dict()
+
+    for n1 in 0:(N_Φ -4)
+        for n2 in (n1 + 1):(N_Φ - 3)
+            for n3 in (n2 + 1):(N_Φ -2)
+                for n4 in (n3 + 1):(N_Φ - 1)
+                    R = n1 + n2 + n3 + n4
+                    Coeff[(n1, n2, n3, n4)] = DictE[(R - 4*n1, R - 4*n2, R - 4*n3)]
+                end
+            end
+        end
+    end
+
+    return Coeff
+end
 
 function four_body_elements_parallel(N_Φ, Coeff::Dict; prec=1e-12)
 
@@ -333,67 +394,6 @@ function four_body_elements_parallel(N_Φ, Coeff::Dict; prec=1e-12)
     return Coeff4B
 end
 
-###################################################################
-
-function Generate_Elements(N_Φ, L_x, PseudoPot::Array{Float64}, type="two")
-    println("Parameters of the Hamiltonians are")
-    @show N_Φ
-    @show L_x
-    @show PseudoPot
-
-
-    max_angular = length(PseudoPot)
-
-
-    coeff = all_projectors(N_Φ, L_x, max_angular, type)
-
-
-    if type=="two"
-        @time Ham = two_body_elements(N_Φ, coeff, PseudoPot)
-        return Ham
-    elseif type == "three"
-        println("Creating The Hamiltonian for 3 body interaction")
-        @time Ham = three_body_elements(N_Φ, coeff, PseudoPot)
-        return Ham
-    else
-        println("Unkown type of interaction choose between <<two>> or <<three>>")
-        return nothing
-    end
-end;
-
-function Generate_4Body(; r::Float64=1.0, Lx::Float64=-1.0, Ly::Float64=-1.0, N_phi::Int64=10, prec=1e-12)
-    if Lx != -1
-        println("Generating 4body pseudopotential coefficients from Lx")
-        Ly = 2 * pi * N_phi / Lx
-        r = Lx / Ly
-    elseif Ly != -1
-        println("Generating 4body pseudopotential coefficients from Ly")
-        Lx = 2 * pi * N_phi / Ly
-        r = Lx / Ly
-    else
-        println("Generating 4body pseudopotential coefficients from r")
-        Lx = sqrt(2 * pi * N_phi * r)
-        Ly = sqrt(2 * pi * N_phi / r)
-    end
-    println(
-        string(
-          "Parameters are N_phi=",
-          N_phi,
-          ", r=",
-          round(r; digits=3),
-          ", Lx =",
-          round(Lx; digits=3),
-          " and Ly =",
-          round(Ly; digits=3),
-        ),
-    )
-
-    coeff = projectors_four_body_parallel(Lx, Ly, N_phi)
-    coeff = streamline_four_body(coeff, N_phi)
-
-    return four_body_elements_parallel(N_phi, coeff; prec=prec)
-end
-
 
 function Generate_Idmrg4body(Coeffs; prec=1e-10)
     AllCoeff = [Dict{Vector{Int64}, Float64}() for i=1:length(collect(keys(Coeffs)))]
@@ -403,7 +403,7 @@ function Generate_Idmrg4body(Coeffs; prec=1e-10)
     end
     
     Coeffs = merge(AllCoeff...)
-    @show typeof(Coeffs)
+    
     opt = optimize_coefficients(Coeffs;prec=prec)
     opt = filter_optimized_Hamiltonian_by_first_site(opt)
 
@@ -411,24 +411,6 @@ function Generate_Idmrg4body(Coeffs; prec=1e-10)
 end
 
 
-
-
-function Generate_IdmrgCoeff(Ly::Float64, Vs::Array{Float64};prec=1e-8, PHsym=false)
-    rough_N = round(Int64, 2*Ly)-2
-    test = round(Int64, 2*Ly)-2
-    while rough_N <= test
-        rough_N = test + 2
-        coeff = Generate_Elements(rough_N, Ly, Vs, "three")
-
-        opt = optimize_coefficients(coeff; prec=prec, PHsym=PHsym)
-        opt = filter_optimized_Hamiltonian_by_first_site(opt)
-        
-        test = check_max_range_optimized_Hamiltonian(opt)
-        if rough_N > test
-          return opt
-        end
-    end
-end
 ####################################
 ####################################
 ####################################
@@ -597,39 +579,6 @@ end
 #############################
 #############################
 #############################
-
-
-function finite_Cylinder_MPO(N_Φ::Int64, L_x::Float64, Vs::Array{Float64,1}, prec::Float64, type::String; NeutralizBackGround::Bool=false, filling::Float64=1/2)
-    if !NeutralizBackGround ||  type=="three"
-        rough_N = N_Φ-2
-        test = rough_N
-            while rough_N <= test
-            rough_N = test + 2
-            coeff = Generate_Elements(rough_N, L_x, Vs, type)
-            opt = optimize_coefficients(coeff; prec=prec)
-            test = check_max_range_optimized_Hamiltonian(opt)
-            if rough_N > test
-                return  generate_Hamiltonian(opt)
-            end
-        end
-    else
-        println("Neutralizing the background for the $(type) body term")
-        rough_N = N_Φ-2
-        test = rough_N
-            while rough_N <= test
-            rough_N = test + 2
-            coeff = Generate_Elements(rough_N, L_x, Vs, type)
-            coeff_bck = Neutralize_Backgroud(coeff, N_Φ, filling)
-            opt = optimize_coefficients(coeff; prec=prec)
-            coeff_bck = optimize_coefficients(coeff_bck; prec=prec)
-            test = check_max_range_optimized_Hamiltonian(opt)
-            if rough_N > test
-                return  (generate_Hamiltonian(opt) + generate_Hamiltonian(coeff_bck))
-            end
-        end
-    end
-    #sorted_opt = sort_by_configuration(opt);
-end;
 
 function generate_Hamiltonian(mpo::OpSum, coeff::Dict; global_factor=1, prec=1e-12)
     for (k, v) in coeff
