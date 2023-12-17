@@ -40,7 +40,7 @@ end
 function GenMPO(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String, type::String, model_params; translator=nothing)
     
     dir = "/scratch/bmorier/IMPO/"
-    name= "Ly$(Ly)_Int$(type)_RootPattern$(tag).jld2"
+    name= "Ly$(Ly)_Interaction$(type)_RootPattern$(tag).jld2"
 
     if isfile(dir*name)
         H, L, R = load(dir*name, "H", "L", "R")
