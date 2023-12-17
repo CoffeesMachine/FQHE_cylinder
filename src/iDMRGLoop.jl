@@ -5,7 +5,7 @@ using ITensorInfiniteMPS
 using Statistics
 include("InfiniteCylinder.jl")
 
-idmrgLoop(; RootPattern::Vector{Int64}, setL::Vector{Float64}, tag::String, θ::Float64, kwargs...) = idmrgLoop(RootPattern, setL[1], tag, θ; kwargs...)
+idmrgLoop(; rp::Vector{Int64}, setL::LinRange{Float64, Int64}, tag::String, θ::Float64, kwargs...) = idmrgLoop(rp, setL[1], tag, θ; kwargs...)
     
 
 
