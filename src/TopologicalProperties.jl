@@ -56,11 +56,9 @@ function BerryPhase(rp::Vector{Int64}; setL::LinRange{Float64, Int64}, kwargs...
     setBerryPhase = []
     for L in setL
       
-        el, W = BerryPhase(rp, L; kwargs...)
+        el= BerryPhase(rp, L; kwargs...)
         append!(setBerryPhase, el)
     end
-
-    @show linear_fit(setL.*setL, setBerryPhase)
 
     return setBerryPhase
 end
@@ -102,14 +100,34 @@ end
 
 
 
-function setfit(setL::Vector{Float64}, DictDT::Dict)
-    setF = []
-    for(k, v) in DictDT
+function topologicalProperties(setL, BerryPhaseD, phiX)
+    println("")
+    setX = setL.*setL
+    dictFit = Dict()
+    flag = false
+    for (k,v) in BerryPhaseD
+        fit = linear_fit(setX, v)
+        if length(k) == 3
+            flag = true
+        end
+        dictFit[k] = fit 
+        eta = π^2*4*fit[2]
 
-        f = linear_fit(setL.*setL, v)
-        # setF[k] = f
-        append!(setF, f)
+        modular = fit[1]
+        #assuming central charge 1/24
+        hₐ = modular
+
+
+        println("hₐ for Φx = $phiX and root pattern $(RootPattern_to_string(k)) : $(hₐ)")
+        println("ηₕ for Φx = $phiX and root pattern $(RootPattern_to_string(k)) : $eta\n")
+    end
+    
+    if flag
+        println("h₀- h₁ = $((dictFit[[2,1,1]][1]-dictFit[[1,2,1]][1]))")
+        println("h₀- h₂ = $((dictFit[[2,1,1]][1]-dictFit[[1,1,2]][1]))")
+        println("h₁- h₂ = $((dictFit[[1,2,1]][1]-dictFit[[1,1,2]][1]))")
     end
 
-    return setF
+    return dictFit
 end
+    
