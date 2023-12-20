@@ -7,22 +7,25 @@ include("InfiniteCylinder.jl")
 
 idmrgLoop(; rp::Vector{Int64}, setL::LinRange{Float64, Int64}, tag::String, θ::Float64, kwargs...) = idmrgLoop(rp, setL[1], tag, θ; kwargs...)
     
-
+idmrgLoop(rp::Vector{Int64}, L::Float64; tag::String, θ::Float64, kwargs...) = idmrgLoop(rp, L, tag, θ; kwargs...)
 
 function idmrgLoop(RootPattern::Vector{Int64}, Ly::Float64, tag::String, θ::Float64; setχ::Vector{Int64}, V2b::Vector{Float64}, V3b::Vector{Float64}, prec::Float64, maxIter::Int64, kwargs...)
     
     println("Calulating for L=$(Ly)")
+    
+    path = "/scratch/bmorier/$(tag)/rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_"
+    nameN = path*"Ly$(round(Ly, digits=5))_theta$(round(θ, digits=5))"
+    filename = "rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_Ly$(round(Ly-1, digits=5))_theta$(round(θ, digits=5))_maxiters$(maxIter)_chi$(maximum(setχ))_alpha0.0.jld2"
+    savedpath =  path*"/scratch/bmorier/2b_3b/"*filename
+    
+    if !isfile(savedpath)
+        savedpath = path*"scratch/bmorier/saved/"*filename
+    end
+
+    dmrgStruct = FQHE_idmrg(RootPattern, Ly, θ, savedpath; V2b=V2b, V3b=V3b, prec=prec)
 
     for χ in setχ
-
-        path = "/scratch/bmorier/$(tag)/rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_"
-        nameN = path*"Ly$(round(Ly, digits=5))_theta$(θ)"
-        savedpath =  path*"/scratch/bmorier/saved/rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_Ly$(round(Ly-1, digits=5))_theta$(round(θ, digits=5))_maxiters$(maxIter)_chi$(χ)_alpha0.0.jld2"
-
-        dmrgStruct = FQHE_idmrg(RootPattern, Ly, θ, savedpath; V2b=V2b, V3b=V3b, prec=prec)
-        
         idmrgLoop(dmrgStruct, nameN, χ, maxIter; kwargs...)
-        
     end 
 end
 
