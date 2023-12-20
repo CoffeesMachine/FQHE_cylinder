@@ -8,6 +8,7 @@ using FileIO
 
 include("src/TopologicalProperties.jl")
 
+index = parse(Int64, ARGS[1])
 
 function readInputFile(filename, index)
     
@@ -74,13 +75,10 @@ function readInputFile(filename, index)
    return kwargs, TypeOfMeasure
 end
 
-index = parse(Int64, ARGS[1])
-
 function run(index)
-    filename = "ParametersFiles/InputFiles/Transition2b3b_L12_1100.in"
+    filename = "ParametersFiles/PfaffianDehnTwist_T0_1100.in"
 
     kwargs, TypeOfMeasure = readInputFile(filename, index)
-
     if TypeOfMeasure == "Dehn twist"
         setL = kwargs[2]
 
@@ -90,17 +88,18 @@ function run(index)
         
         nameDehnTwist = path*filename
         BerryPhaseD = Dict()
-        if isfile(nameDehnTwist)
-            println("Dehn twist already calculated. Files at $(nameDehnTwist)")
-        else
-            BerryPhaseD = BerryPhase(; kwargs...)
-            save(nameDehnTwist, "dict twist", BerryPhaseD)
-        end
+        
+  
+        BerryPhaseD = BerryPhase(; kwargs...)
+        save(nameDehnTwist, "dict twist", BerryPhaseD)
+    
     else
         println("Skip Dehn twist calculation")
         flush(stdout)
         idmrgLoop(; kwargs...)
     end
+
+    println("Done")
 end
 
 run(index)
