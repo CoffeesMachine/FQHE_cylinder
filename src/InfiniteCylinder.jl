@@ -5,6 +5,7 @@ using FileIO
 using JLD2
 include("MatrixElement.jl");
 include("/home/bmorier/DMRG/ITensorInfiniteMPS.jl/src/models/fqhe13.jl")
+include("Coefficients/Coefficients.jl")
 
 function fermion_momentum_translater_General(i::Index, n::Int64, N)
     ts = tags(i)
@@ -37,86 +38,31 @@ end
 #################################
 #################################
 
-function GenMPO(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String, type::String, model_params; translator=nothing)
+function GenMPO(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String, type::String, model_params; rp=nothing, translator=nothing)
     
     dir = "/scratch/bmorier/IMPO/"
-    name= "Ly$(Ly)_Interaction$(type)_RootPattern$(tag).jld2"
+    name= "Ly$(round(Ly, digits=5))_Interaction$(type)_RootPattern$(tag).jld2"
 
-    if isfile(dir*name)
-        H, L, R = load(dir*name, "H", "L", "R")
-        return H, L, R
-    
+    if type == "two"
+        if isfile(dir*name)
+            H, L, R = load(dir*name, "H", "L", "R")
+            return H, L, R, s
+        
+        else
+            model = Model("fqhe_2b_pot") 
+            
+            infMPO = InfiniteMPOMatrix(model, s, translator; model_params...)
+            
+            (H, L ,R), _, _  = ITensorInfiniteMPS.compress_impo(infMPO, projection =  1, cutoff = 1e-10, verbose = true, max_iter = 500)
+            save(dir*name, "H", H, "L", L, "R", R)
+            return H, L, R, s
+        end
     else
-        model = type=="two" ? Model("fqhe_2b_pot") : Model("fqhe_gen")
-        
-        infMPO = type == "three" ? InfiniteMPOMatrix(model, s, translator;  dict_coeffs=model_params) : InfiniteMPOMatrix(model, s, translator; model_params...)
-        
-        (H, L ,R), _, _  = ITensorInfiniteMPS.compress_impo(infMPO, projection =  1, cutoff = 1e-10, verbose = true, max_iter = 500)
-        save(dir*name, "H", H, "L", L, "R", R)
-        return H, L, R
+        return Generate_MPO(rp, Ly, type, translator)
     end
 
 end;   
 
-function GenMPO(Ly::String, tag::String, type::String; translator=nothing)
-
-    dir = "/scratch/bmorier/IMPO"
-    CoeffName =  "/scratch/bmorier/Coeff/Split_4b_Ly$(Ly)_$(tag).jld2"
-    model = Model("fqhe_gen")
-    @show CoeffName
-    isfile(CoeffName) || error("Coefficients not generated, please generate them before")
-
-    Coeff, s = load(CoeffName, "coeffs", "s")
-    mpo_file = dir*"FourBody/Ly$(Ly)_Int$(type)_RootPattern$(tag).jld2"
-
-    H = 0; 
-    L = 0; 
-    R = 0; 
-    counter = 0
-
-
-    if isfile(mpo_file)
-        println("Loading the MPO")
-        H, L, R, counter = load(mpo_file, "H", "L", "R", "counter")
-        println("Done $(counter+1)/$(length(Coeff))")
-        flush(stdout)
-    else
-        counter = 0
-        println("Starting $(counter+1)/$(length(Coeff))")
-        flush(stdout)
-        coeff_ham = Generate_Idmrg4body(Coeff[counter])
-        HMPO = InfiniteMPOMatrix(model, s, translator; dict_coeffs = coeff_ham)
-        (H, L, R), _, _ = ITensorInfiniteMPS.compress_impo(HMPO, projection = 1, cutoff = 1e-10, verbose = true, max_iter = 500);
-        save(mpo_file, "H", H,  "L", L, "R", R, "counter", 0);
-    end
-
-
-    for m in counter+1:length(Coeff)-1
-        println("Starting $(m+1)/$(length(Coeff))")
-        flush(stdout)
-        coeff_ham = Generate_Idmrg4body(Coeff[m])
-        HMPO_1 = InfiniteMPOMatrix(model, s, translator; dict_coeffs = coeff_ham);
-        (H1, L1, R1), _, _ = ITensorInfiniteMPS.compress_impo(HMPO_1, projection = 1, cutoff = 1e-10, verbose = true, max_iter = 500);
-        
-        #=
-        newH = H + H1
-        newL = Vector{ITensor}(undef, 4)
-        newL[1] = L[1] + L1[1]; newL[2] = L[2]; newL[3] = L1[2]; newL[4] = L[end];
-        newR = Vector{ITensor}(undef, 4)
-        newR[1] = R[1]; newR[2] = R[2]; newR[3] = R1[2]; newR[4] = R[end] + R1[end];
-        =#
-
-        newH, newL, newR = (H1, L1, R1) + (H, L, R)
-        (H, L, R), _, _ = ITensorInfiniteMPS.compress_impo(newH; right_env = newR, left_env = newL, projection = 1, cutoff = 1e-10, verbose = true, max_iter = 500)
-        save(mpo_file, "H", H,  "L", L, "R", R, "counter", m);
-    end
-
-    return H, L, R, s
-
-
-
-
-end
 #################################
 #################################
 
@@ -173,15 +119,15 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
     
     s3 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
     s2 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
-
-    params_3b = (dict_coeffs = Generate_IdmrgCoeff(Ly, V3b; prec=prec, PHsym=false))
+    params_3b = 0.
     params_2b = (Ly = Ly, Vs = V2b, prec = prec)
 
-    iMPO_3b = GenMPO(s2, Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; translator=fermion_momentum_translater_two)
-    iMPO_2b = GenMPO(s3, Ly, V2b, RootPattern_to_string(RootPattern), "two", params_2b; translator=fermion_momentum_translater_two)
-
+    H3, L3, R3, s3 = GenMPO(s2, Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b;rp=RootPattern, translator=fermion_momentum_translater_two)
+    H2, L2, R2, _ = GenMPO(s3, Ly, V2b, RootPattern_to_string(RootPattern), "two", params_2b; translator=fermion_momentum_translater_two)
+    iMPO_3b = (H3, L3, R3)
+    iMPO_2b = (H2, L2, R2)
    
-    s = MPS_unitcell(s2)
+    s = MPS_unitcell(s3)
 
     function initstate(n)
         if RootPattern == [2,2,1,1]
@@ -281,6 +227,8 @@ function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, type::
     end
 
     if SavePath != "" && isfile(SavePath)
+        println("Loading smaller State")
+        flush(stdout)
         ψ1 = oldDmrg.ψ
         sh = siteinds(ψ1)
         so = siteinds(sH)
