@@ -16,9 +16,8 @@ function topologicalShift(RootPattern::Vector{Int64})
     if length(RootPattern) == 4
         if RootPattern == [2, 2, 1, 1]
             topoShift = 2
-        elseif RootPattern == [2,1,2,1]
+        elseif RootPattern == [2, 1, 2, 1]
             topoShift = 1
-
         end
     else
         if RootPattern == [2,1,1]
@@ -42,7 +41,7 @@ function BerryPhase(rp::Vector{Int64}, L::Float64; χ::Int64, θ::Float64, tag::
     !isfile(path*name) && idmrgLoop(rp, L, tag, θ; kwargs...)
 
     #calculate berryPhase due to modular T transform
-    println("\nCalculating Dehn twist for L = $(L) !")
+    println("\nCalculating Dehn twist for L = $(L)")
     flush(stdout)
     shift = topologicalShift(rp)
     
@@ -56,10 +55,14 @@ end
 
 function BerryPhase(rp::Vector{Int64}; setL, kwargs...)
     setBerry = []
-    @show setL
+    skipDT = true
     for L in setL
+        if skipDT 
+            idmrgLoop(rp, L; kwargs...)
+        else
         el = BerryPhase(rp, L; kwargs...)
         append!(setBerry, el)
+        end
     end
     
     return setBerry
