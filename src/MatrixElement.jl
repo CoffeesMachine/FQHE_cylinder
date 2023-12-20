@@ -2,6 +2,9 @@ using FileIO
 using JLD2
 using ITensors
 
+
+include("BuildingHamiltoniansAuxiliary.jl")
+
 ##############
 #  two body  #
 ##############
@@ -187,7 +190,7 @@ function streamline_three_body_dictionnary_cylinder(dic, N_phi)
       for n_2 in (n_1 + 1):(N_phi - 2)
         for n_3 in (n_2 + 1):(N_phi - 1)
           R3 = n_1 + n_2 + n_3
-          coefficients[(n_1, n_2, n_3)] = dic[(R3 - 3n_1, R3 - 3n_2)]
+          coefficients[(n_1, n_2, n_3)] = dic[(R3 - 3*n_1, R3 - 3*n_2)]
         end
       end
     end
@@ -198,7 +201,7 @@ function build_hamiltonian_from_three_body_factorized_streamlined_dictionary(
     coeff, N_phi; global_sign=1, prec=1e-12
   )
     full_coeff = Dict{Array{Int64,1},Float64}()
-    for R3 in 3:(3N_phi - 3)  #Barycenter
+    for R3 in 3:(3*N_phi - 3)  #Barycenter
       for n_1 in max(0, R3 - 2N_phi + 3):min(N_phi - 3, R3 ÷ 3 - 1)
         for n_2 in max(n_1 + 1, R3 - n_1 - N_phi + 1):min(N_phi - 2, (R3 - n_1 - 1) ÷ 2)
           n_3 = R3 - n_1 - n_2
@@ -226,15 +229,18 @@ function build_three_body_pseudopotentials(;
     global_sign=1,
   )
     if Lx != -1
-      println("Generating 3body pseudopotential coefficients from Lx")
+      println("Generating 3 body pseudopotential coefficients from Lx")
+      flush(stdout)
       Ly = 2 * pi * N_phi / Lx
       r = Lx / Ly
     elseif Ly != -1
-      println("Generating 3body pseudopotential coefficients from Ly")
+      println("Generating 3 body pseudopotential coefficients from Ly")
+      flush(stdout)
       Lx = 2 * pi * N_phi / Ly
       r = Lx / Ly
     else
-      println("Generating 3body pseudopotential coefficients from r")
+      println("Generating 3 body pseudopotential coefficients from r")
+      flush(stdout)
       Lx = sqrt(2 * pi * N_phi * r)
       Ly = sqrt(2 * pi * N_phi / r)
     end
@@ -250,13 +256,32 @@ function build_three_body_pseudopotentials(;
         round(Ly; digits=3),
       ),
     )
+    flush(stdout)
+
     coeff = build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=prec)
     coeff = streamline_three_body_dictionnary_cylinder(coeff, N_phi)
-    return build_hamiltonian_from_three_body_factorized_streamlined_dictionary(
-      coeff, N_phi; global_sign=global_sign, prec=prec
-    )
+    coeff = build_hamiltonian_from_three_body_factorized_streamlined_dictionary(coeff, N_phi; global_sign=global_sign, prec=prec)
+    return coeff
 end
 
+
+function Generate_OptIdmrg(Ly; prec=1e-10)
+    rough_N = round(Int64, 2*Ly)-2
+    test = round(Int64, 2*Ly)-2
+    while rough_N <= test
+        rough_N = test + 2
+        coeff = build_three_body_pseudopotentials(;N_phi=rough_N, Ly=Ly, prec=prec)
+
+        opt = filter_dict(coeff; prec=prec)
+        opt = filter_optimized_Hamiltonian_by_first_siteGen(opt; pos=1, n=0)
+        
+        test = check_max_range_optimized_Hamiltonian(opt; check=1)
+        if rough_N > test
+          return opt
+        end
+    end
+
+end
 
 
 function Generate_IdmrgCoeff(Ly::Float64, Vs::Array{Float64};prec=1e-8, PHsym=false)
@@ -310,7 +335,7 @@ function Generate_4Body(; r::Float64=1.0, Lx::Float64=-1.0, Ly::Float64=-1.0, N_
 
     coeff = projectors_four_body_parallel(Lx, Ly, N_phi)
     coeff = streamline_four_body(coeff, N_phi)
-
+    
     return four_body_elements_parallel(N_phi, coeff; prec=prec)
 end
 
@@ -395,187 +420,27 @@ function four_body_elements_parallel(N_Φ, Coeff::Dict; prec=1e-12)
 end
 
 
-function Generate_Idmrg4body(Coeffs; prec=1e-10)
-    AllCoeff = [Dict{Vector{Int64}, Float64}() for i=1:length(collect(keys(Coeffs)))]
-    i = 1
-    for (k, v) in Coeffs
-        AllCoeff[i] = v
-    end
-    
-    Coeffs = merge(AllCoeff...)
-    
-    opt = optimize_coefficients(Coeffs;prec=prec)
-    opt = filter_optimized_Hamiltonian_by_first_site(opt)
-
-    return opt
-end
-
 
 ####################################
 ####################################
 ####################################
  
 
-function HermitePolynomial(x, n::Int64)
-
-    if n == 0
-        return 1
-    elseif n == 1
-        return 2*x
-    elseif n == 2
-        return 4*x^2 - 2
-    end
-        
-    Hm2 = 1
-    Hm1 = 2*x
-    Hm = 4*x^2 - 2
-
-    for j in 3:n
-        Hm2 = Hm1
-        Hm1 = Hm
-        Hm = 2*x*Hm1 - 2*(j - 1) *Hm2
-    end
-
-    return Hm
-
-end;
-
-function W_polynomial(ns...)
-    N = length(ns)
-    
-    if N == 2
-        return ns[1] - ns[2]
+function Generate_Idmrg(Coeffs; prec=1e-10)
+    AllCoeff = [Dict{Vector{Int64}, Float64}() for i=1:length(collect(keys(Coeffs)))]
+    i = 1
+    for (k, v) in Coeffs
+        AllCoeff[i] = v
+        i+= 1
     end
     
-    if N == 1
-        return 0
-    end
+    Coeffs = merge(AllCoeff...)
     
-    res = 1
-    
-    for j in 2:N
-        res *= (ns[1] - ns[j])
-    end
-    
-    return res * W_polynomial(ns[2:end]...)
+    opt = optimize_coefficients(Coeffs;prec=prec)
+    opt = filter_optimized_Hamiltonian_by_first_siteGen(opt; pos=2, n=1)
+
+    return opt
 end
-  
-function W_polynomial(n1, n2)
-    return (n1 - n2)
-end
-
-function W_polynomial(n1, n2, n3)
-    return (n1 - n2) * (n1 - n3) * (n2 - n3)
-end
-  
-function W_polynomial(n1, n2, n3, n4)
-    return (n1 - n2) * (n1 - n3) * (n1 - n4) * (n2 - n3) * (n2 - n4) * (n3 - n4)
-end
-
-function wellOrderdedSet(m1, m2, m3)
-    gloablsign= 1
-    M = (m1, m2, m3)
-    M1 = min(M[1], M[2], M[3])
-    if M1 == m2
-        gloablsign *= -1
-        M = (m2, m1, m3)
-    elseif M1 == m3
-        M = (m3, m1, m2)
-    end
-
-    M2 = max(M[2], M[3])
-    if M2 == M[2]
-        gloablsign *= -1
-        M = (M[1], M[3], M[2])
-    end
-    @assert M[1] < M[2] && M[2] < M[3]
-    return M[1], M[2], M[3], gloablsign
-end;
-
-function get_perm!(lis, name)
-    for j in 1:(length(lis) - 1)
-      if lis[j] > lis[j + 1]
-        c = lis[j]
-        lis[j] = lis[j + 1]
-        lis[j + 1] = c
-        c = name[j]
-        name[j] = name[j + 1]
-        name[j + 1] = c
-        sg = get_perm!(lis, name)
-        return -sg
-      end
-    end
-    return 1
-end;
-
-function filter_op!(lis, name)
-    x = 1
-    while x <= length(lis) - 1
-      if lis[x] == lis[x + 1]
-        if name[x] == "Cdag" && name[x + 1] == "C"
-          popat!(lis, x + 1)
-          popat!(name, x + 1)
-          name[x] = "N"
-        elseif name[x] == "C" && name[x + 1] == "Cdag"
-          popat!(lis, x + 1)
-          popat!(name, x + 1)
-          name[x] = "Nbar"
-        else
-          print("Wrong order in filter_op")
-        end
-      end
-      x += 1
-    end
-end;
-
-function optimize_coefficients(coeff::Dict; prec=1e-12, PHsym = false)
-    optimized_dic = Dict()
-    for (ke, v) in coeff
-      if abs(v) < prec
-        continue
-      end
-      if mod(length(ke), 2) == 1
-        error("Odd number of operators is not implemented")
-      end
-      name = PHsym ? vcat(fill("C", length(ke)÷2), fill("Cdag", length(ke)÷2)) :  vcat(fill("Cdag", length(ke)÷2), fill("C", length(ke)÷2))
-      k = Base.copy(ke)
-      sg = get_perm!(k, name)
-      filter_op!(k, name)
-
-      new_k = [isodd(n) ? name[n ÷ 2 + 1] : k[n ÷ 2] + 1 for n in 1:(2 * length(name))]
-      optimized_dic[new_k] = sg * v
-    end
-    return optimized_dic
-end;
-  
-function filter_optimized_Hamiltonian_by_first_site(coeff::Dict; n=1)
-    res = Dict()
-    for (k, v) in coeff
-      if k[2] == n
-        res[k] = v
-      end
-    end
-    return res
-end;
-
-function filter_optimized_Hamiltonian_by_first_siteOld(coeff::Dict; n=0)
-    res = Dict()
-    for (k, v) in coeff
-      if k[1] == n
-        res[k] = v
-      end
-    end
-    return res
-end;
-  
-function check_max_range_optimized_Hamiltonian(coeff::Dict; check=2)
-    temp = 0
-    for k in keys(coeff)
-      temp = max(temp, k[end] - k[check])
-    end
-    return temp
-end
-
 #############################
 #############################
 #############################
