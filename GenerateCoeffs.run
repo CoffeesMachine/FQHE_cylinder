@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #SBATCH --job-name=IDMRG_CYL2
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=1
 #SBATCH --time=3-00:00:00
-#SBATCH --mem=25GB
+#SBATCH --mem=6GB
 #SBATCH --qos=serial
 #SBATCH --output=logs/%x_%a.o        
 #SBATCH --error=logs/%x_%a.e         
@@ -11,4 +11,4 @@
 
 mkdir -p logs
 
-OMP_NUM_THREADS=8 MKL_DYNAMIC=true julia --threads 8 Generate_4b_Coeffs.jl "$@" #parameters
+OMP_NUM_THREADS=8 MKL_DYNAMIC=true julia --threads 1 GenerateCoeffs.jl "$@" #parameters
