@@ -5,20 +5,19 @@ using ITensorInfiniteMPS
 include("InfiniteCylinder.jl")
 
 
-function TwistOperator(range::UnitRange{Int64}, ψ::InfiniteCanonicalMPS, τ::Float64, topologicalShift::Int64, q::Int64, Φx::Float64; Ne_unitCell::Int64=1, Φy::Float64, kwargs...)
+function TwistOperator(range::UnitRange{Int64}, ψ::InfiniteCanonicalMPS, τ::Float64, topologicalShift::Int64, q::Int64, Φx::Float64, cut; Ne_unitCell::Int64=1, Φy::Float64, kwargs...)
     
-    input_inds = inds(ψ.AL[1])[1]
+    input_inds = inds(ψ.C[0])[1]
+    
     diag =[]
     for qn in input_inds.space
-        N = qn[1][1].val/q
-        K = (qn[1][2].val - topologicalShift + (Φx/2π)*qn[1][1].val)/q
-        dim = qn[2]
-
-        expFactor = exp(im*π*(nsites(ψ)*Ne_unitCell - 1)*N)*exp(-2π*im*τ*K + im*Φy*N)
-        Gp = expFactor*ones(dim)
+        N = qn[1][1].val/3
+        K = (qn[1][2].val-topologicalShift)/3 - N
+        expFactor = exp(im*π*(nsites(ψ)*Ne_unitCell - 1)*N)*exp(-2π*im*τ*K+im*Φx*N*τ + im*Φy*N)
+        Gp = expFactor*ones(qn[2])
         append!(diag, Gp)
     end
-
+   
     output_inds = replacetags(copy(input_inds), "c=0" => "c=$(div(last(range), nsites(ψ)))")
 
     G = diagm(collect(Iterators.flatten(diag)))
@@ -63,11 +62,15 @@ function contractTorus(psi2::MPS, psi::MPS)
     return O
 end
 
-function DehnTwist(ψ::InfiniteCanonicalMPS, N_cell::Int64, topologicalSector::Int64, namesave::String, L::Float64; Φx::Float64, q::Int64, kwargs...)
+function DehnTwist(ψ::InfiniteCanonicalMPS, N_cell::Int64, topologicalShift::Int64, namesave::String, L::Float64, cut::Int64; Φx::Float64, q::Int64, kwargs...)
     BerryFac = 0.
+    Nτ = 200
 
-    ψT = ψ.AL[1:q*N_cell]
-    
+
+    rangeT = (cut+1):(q*N_cell+cut)
+    ψT = ψ.AR[rangeT]
+
+
     BlockMPS = 0
     if isfile(namesave)
         BlockMPS = load(namesave, "block")
@@ -76,31 +79,141 @@ function DehnTwist(ψ::InfiniteCanonicalMPS, N_cell::Int64, topologicalSector::I
         save(namesave, "block", BlockMPS)
     end
 
-    G_0 = TwistOperator(1:q*N_cell, ψ, 0., topologicalSector, q, Φx; kwargs...)
-    G_1 = TwistOperator(1:q*N_cell, ψ, 1., topologicalSector, q, Φx; kwargs...)
-    H =  Energy(ψ, topologicalSector, Φx)
+    setMPS = [TwistOperator(rangeT, ψ, 0.0, topologicalShift, q, Φx, cut; kwargs...), TwistOperator(rangeT, ψ, 1., topologicalShift, q, Φx, cut; kwargs...)]
 
+    O = ((Φx/2π)^2 - Φx/2π + 1/6)/(2*3)
+    #W = BerryConnection(BlockMPS, copy(setMPS[2]), copy(setMPS[1]))
+    # C_mean = test(ψ)
+    #H = Expect_Energy_UnitCell(ψ, topologicalShift, Φx, q, C_mean)
+    # @show imag(log(W))
+
+
+    BerryFac =  K(ψ, topologicalShift, Φx, q) - 1/(24*3)
+    Berry = BerryFac
+    return Berry
+   
+end
+
+function K(ψ, topologicalShift, Φx, q)
+
+   
+    Hloc = 0
+    i=0
+    psi = ψ.C[i]
+    ind = inds(psi)[1]
+    _,S,_ = svd(psi, ind)
+
+    n=1
+    temp = inds(S)[1]
+    for qn in temp.space
+        for y in 1:qn[2] 
+            KN = qn[1][2].val
+            NN = qn[1][1].val
+            
+            Kloc = (KN -topologicalShift+0.5*NN)/q
+
+
+            Hloc += S[n,n]^2*(-Kloc)
+            
+            n += 1
+        end
+    end
     
-    W = BerryConnection(BlockMPS, G_1, G_0)
-    BerryFac = 2π*(-H + ((Φx/(2π))^2 - Φx/(2π) + 1/6)/(2*q) - L^2/(q*16*π^2))
-    BerryFac += imag(log(W))
-    @show BerryFac
-    BerryFac /= π 
- 
-    return BerryFac, W
+    return Hloc
+end
+
+
+
+function Expect_Energy_UnitCell(ψ, topologicalShift, Φx, q, C_mean)
+
+    H = 0
+
+    for i in 0:2
+        Hloc = 0
+        
+        psi = ψ.C[i]
+        ind = inds(psi)[1]
+        _,S,_ = svd(psi, ind)
+
+        n=1
+        temp = inds(S)[1]
+        for qn in temp.space
+            for y in 1:qn[2] 
+                KN = qn[1][2].val
+                NN = qn[1][1].val
+                
+                Kloc = (KN -topologicalShift +(-1+Φx/2π)*NN)/q
+                Nloc = NN/q
+
+
+                Hloc += S[n,n]^2*(Kloc - (i-1/2 + Φx/2π)*(Nloc-C_mean))
+                
+                n += 1
+            end
+        end
+        H += Hloc
+    end
+    H /= 3
+    return H
+end
+
+function test(ψ)
+
+    H = 0
+
+    for i in 0:2
+        Hloc = 0
+        
+        psi = ψ.C[i]
+        ind = inds(psi)[2]
+        _,S,_ = svd(psi, ind)
+
+        n=1
+        temp = inds(S)[1]
+        for qn in temp.space
+            for y in 1:qn[2] 
+                NN = qn[1][1].val
+                
+                Nloc = NN/3
+
+
+                Hloc += S[n,n]^2*(Nloc)
+                
+                n += 1
+            end
+        end
+        H += Hloc
+    end
+    H /= 3
+    println("<<C>> = $H")
+    return H
+end
+
+
+
+
+#=
+function ITensors.op(::OpName"Proj", ::SiteType"FermionK"; y=0)
+    M = complex(zeros(2,2))
+    M[1,1] = 1.
+    M[2,2] = exp(+im*y)
+
+    return M
 end
 
 function Energy(ψ::InfiniteCanonicalMPS,topologicalShift, Φx)
 
     res = 0
-
-    for i in 1:3
+    
+    for i in 0:2
         t = 0
         ψS = ψ.C[i]
         ind = inds(ψS)[1]
+
         _, S, _ = svd(ψS, ind)
         temp = inds(S)[1]
         n=1
+        
         for qn in temp.space
             for y in 1:qn[2]
             N = qn[1][1].val/3
@@ -119,17 +232,12 @@ function Energy(ψ::InfiniteCanonicalMPS,topologicalShift, Φx)
     return res
 end
 
-
-
-#=
-function ITensors.op(::OpName"Proj", ::SiteType"FermionK"; y=0)
+function ITensors.op(::OpName"Nn", ::SiteType"FermionK")
     M = complex(zeros(2,2))
-    M[1,1] = 1.
-    M[2,2] = exp(+im*y)
+    M[1,1] = 0.
+    M[2,2] = 1.
 
-    return M
-end
-
+    ret
 function newMPS(psi::MPS, Nsites, shift=0)    
     for i in 1:Nsites
         gamma = pi*(i-1)^2/Nsites
@@ -141,7 +249,7 @@ function newMPS(psi::MPS, Nsites, shift=0)
     return psi
 end
 
-function DehnTwist(ψ::InfiniteCanonicalMPS, Nτ::Int64, N_cell::Int64, topologicalSector::Int64, namesave::String, W=nothing; q::Int64, kwargs...)
+function DehnTwist(ψ::InfiniteCanonicalMPS, Nτ::Int64, N_cell::Int64, topologicalShift::Int64, namesave::String, W=nothing; q::Int64, kwargs...)
     BerryFac = 0.
 
     setMPS = Array{ITensor}(undef, Nτ)
@@ -161,7 +269,7 @@ function DehnTwist(ψ::InfiniteCanonicalMPS, Nτ::Int64, N_cell::Int64, topologi
 
     for (ind, τ) in enumerate(setTau)
         mod(ind-1, 50) == 0 && println("Calculating Dehn twist for τ = $τ")
-        setMPS[ind]  =  TwistOperator(rangeT, ψ, τ, topologicalSector, q; kwargs...)
+        setMPS[ind]  =  TwistOperator(rangeT, ψ, τ, topologicalShift, q; kwargs...)
         #continue
         ind == 1 && continue
         continue
@@ -172,12 +280,12 @@ function DehnTwist(ψ::InfiniteCanonicalMPS, Nτ::Int64, N_cell::Int64, topologi
             @show abs(BerryEl)
             println("Modulus too small, retry with smallest step")
             flush(stdout)
-            return DehnTwist(copy(ψ), Nτ + 100, N_cell, topologicalSector, namesave; q, kwargs...)
+            return DehnTwist(copy(ψ), Nτ + 100, N_cell, topologicalShift, namesave; q, kwargs...)
         end
         
         BerryFac -= imag(log(BerryEl))
     end
-    H =  Energy(ψ, topologicalSector, 0)
+    H =  Energy(ψ, topologicalShift, 0)
     #newψ = newMPS(copy(ψT), q*N_cell)
     #@show BerryConnection(ψT, newψ, copy(setMPS[Nτ]), copy(setMPS[1]))
     println("Calculating Call-Back")
