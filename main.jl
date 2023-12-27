@@ -12,9 +12,9 @@ using CurveFit
 using FileIO
 
 include("src/TopologicalProperties.jl")
+include("src/Entanglement_spectrum.jl")
 
-
-function readInputFile(filename, theta)
+function readInputFile(filename, theta) 
     
     vars = Dict()
     open(filename, "r") do f
@@ -59,11 +59,13 @@ function readInputFile(filename, theta)
         Φx = vars["FluxX"], 
         Φy = vars["FluxY"],
         q = qt,
-        Ne_unitCell = qt == 4 ? 2 : 1
+        Ne_unitCell = qt == 4 ? 2 : 1,
+        cut =Int64(vars["cut"])
     )
  
    return kwargs
 end
+
 
 function RootPattern_to_string(RootPattern::Vector{Int64}; first_term="")
     s = ""
@@ -84,9 +86,9 @@ function run()
 
     setL = kwargs[2]
 
-    path = "DMRG/Data/$(kwargs[5])Infinite/DehnTwist/" 
-
-    filename = "W_DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[15])_Flux$(round(kwargs[17], digits=5)).jld2"
+    path = "DMRG/Data/Infinite/DehnTwist/" 
+    PhiX = round(kwargs[17], digits=5)
+    filename = "cffd ut$(kwargs[21])_DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[15])_Flux$(PhiX).jld2"
     #filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[6]).jld2"
     
     nameDehnTwist = path*filename
@@ -96,119 +98,99 @@ function run()
         BerryPhaseD = load(nameDehnTwist, "dict twist")
     else
         BerryPhaseD = BerryPhase(;kwargs...)
-        save(nameDehnTwist, "dict twist", BerryPhaseD)
+        #save(nameDehnTwist, "dict twist", BerryPhaseD)
     end
 
     #=
     for (k,v) in BerryPhaseD
         BerryPhaseD[k] = v[7:13]
-    end
+    end3
     =#
     setL = collect(setL)
-
-    ll = setfit(setL, BerryPhaseD)
-    @show (ll[1], ll[2])
-    @show (ll[3], ll[4])
+    Fit = topologicalProperties(setL, BerryPhaseD, PhiX)
     
-    @show ll[1]-ll[3]
-    @show ll[1]-ll[5]
     setX = setL.*setL
     fig = plot()
-    scatter!(fig,setX, BerryPhaseD[[2,1,1]], marker=:dot, color="red", label="rp : 100")
+    scatter!(fig, setX, BerryPhaseD[[2,1,1]], marker=:dot, color="red", label="rp : 100")
     scatter!(fig, setX, BerryPhaseD[[1,2,1]], marker=:utriangle, color="blue", label="rp : 010")
     scatter!(fig, setX, BerryPhaseD[[1,1,2]], marker=:diamond, color="green", label="rp : 001")
-
+    title!(string(L"$\Phi_{x} = $", PhiX))
+    xlabel!(L"$L^2$")
+    ylabel!(L"$\mathcal{U}_{\mathcal{T}}/\pi$")
     display(fig)
 end
 
 run()
-#=
-function plotBerryphase(Lmax)
 
-    DictB, setL = load("DMRG/Data/LaughlinInfinite/DehnTwist/test_Lmax$(Lmax).jld2", "berry", "L")
-    Ncell = 50
-    range = 2:5
-    B100 = DictB["100"]
-    B010 = DictB["010"]
-    B001 = DictB["001"]
-    newsetL = collect(setL)
 
-    setX = [l^2 for l in newsetL]
-    @show setL
-    #fit
-    fit100 = linear_fit(setX, B100)
-    fit010 = linear_fit(setX, B010)
-    fit001 = linear_fit(setX, B001)
-
-    @show fit100
-    @show fit010
-    @show fit001
-
-    fig = plot()
-
-    scatter!(setX, B100, marker=:dot, color="red", label="rp : 100")
-    scatter!(setX, B010, marker=:square, color="blue", label="rp : 010")
-    scatter!(setX, B001, marker=:diamond, color="green", label="rp : 001")
-    #plot!(fig, setX, fit100[1] .+ fit100[2].*setX, linestyle=:dash, color="red", linewidth=2)
-    #plot!(fig, setX, fit010[1] .+ fit010[2].*setX, linestyle=:dash, color="blue", linewidth=2)
-    #plot!(fig, setX, fit001[1] .+ fit001[2].*setX, linestyle=:dash, color="green", linewidth=2)
-    xlabel!(L"$L_{x}^2$")
-    ylabel!(L"$U_{T}/\pi$")
-    title!("Berry Phase for Dehn twist with $(Ncell) electrons", titlefont = font(10,"Computer Modern"))
-
-    display(fig)
-
-    println("h_a -h_0 =$((fit100[1]-fit001[1])/2)")
-    println("h_0 - c/24 = ", fit100[1]/2)
-end
-=#
 function runPfaff()
     setRP = [[2,2,1,1], [2,1,2,1]]
     path = "DMRG/Data/PfaffianInfinite/"
     BerryPhaseD = Dict()
     for rp in setRP
-        filename = "DT_rp$(RootPattern_to_string(rp))_Lmin11.0_Lmax17.0_step7_chi512_Ncell10_Flux0.0.jld2"
+        filename = "DT_rp$(RootPattern_to_string(rp))_Lmin15.0_Lmax18.6_step19_chi512_Ncell12_Flux3.14159.jld2"
         #filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[6]).jld2"
 
         nameDehnTwist = path*filename
         
         el = load(nameDehnTwist, "dict twist")
         vec = []
+        
         if rp == [2,2,1,1]
             
-            vec = el[rp][1:6] 
-            @show vec
-            for ind in 1:6
-                @show ind
-                if ind == 1 || ind == 4
-                    @show vec[ind]
-                    vec[ind] = vec[ind] + 1
-                    @show vec[ind]
+            vec = real(el[rp])
+            
+            for ind in eachindex(vec)
+                vec[ind] = mod1(vec[ind], 1)
+                if ind == 7 || ind == 10 || ind == 11 
+                    vec[ind] -= .5
+                elseif ind >= 14
+                    vec[ind] -= 1
+
                 end
             end
-            @show vec
         else
-            vec = el[rp][1:6]
+            vec = real(el[rp])
+        
+            for ind in 1:length(vec)
+                vec[ind] = mod1(vec[ind], 1)
+                if ind == 17
+                    vec[ind] -= 0.1
+                end
+            end
         end
+        #vec = el[rp]
         BerryPhaseD[rp] = vec
     end
 
     
+   
+    setL = collect(LinRange(15., 18.6, 19))
 
-    setL = collect(LinRange(11., 16., 6))
-
-    ll = setfit(setL, BerryPhaseD)
-    @show (ll[1], ll[2])
-    @show (ll[3], ll[4])
-
-    @show ll[1]-ll[3]
+    #=
+    for rp in setRP
+        plot_entanglement_spectrum(setL, rp)
+    end
+    =#
+    PhiX = pi
     setX = setL.*setL
+
+    
+    fit = topologicalProperties(setL, BerryPhaseD, pi)
+    f1 = fit[[2,2,1,1]]
+    f2 = fit[[2,1,2,1]]
+
     fig = plot()
     scatter!(fig,setX, BerryPhaseD[[2,2,1,1]], marker=:dot, color="red", label="rp : 1100")
     scatter!(fig, setX, BerryPhaseD[[2,1,2,1]], marker=:diamond, color="blue", label="rp : 1010")
-
+    plot!(fig, setX, f1[1].+f1[2].*setX)
+    plot!(fig, setX, f2[1].+f2[2].*setX)
+    title!(string(L"$\Phi_{x} = $", PhiX))
+    xlabel!(L"$L^2$")
+    ylabel!(L"$\mathcal{U}_{\mathcal{T}}$")
     display(fig)
-end
-    
 
-runPfaff()
+    return nothing
+end;
+    
+runPfaff();
