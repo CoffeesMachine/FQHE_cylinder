@@ -40,27 +40,6 @@ end
 #################################
 #################################
 
-#=
-function MPOTwoBody(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String; translator=nothing)
-    
-    dir = "DMRG\\Data\\InfMPO\\InfMPO_2body\\"
-    name= "Ly$(Ly)_Vs$(Vs)_root$(tag).jld2"
-
-    if isfile(dir*name)
-        H, L, R = load(dir*name, "H", "L", "R")
-        return H, L, R
-    else
-        model = Model("fqhe_2b_pot")
-        model_params = (Ly = Ly, Vs = Vs, prec = 1e-10)
-
-        MPO_ = InfiniteMPOMatrix(model, s, translator;  model_params...)
-        (H, L ,R), _, _  = ITensorInfiniteMPS.compress_impo(MPO_, projection =  1, cutoff = 1e-10, verbose = true, max_iter = 500)
-        save(dir*name, "H", H, "L", L, "R", R)
-        return H, L, R
-    end
-end;   
-=#
-
 function GenMPO(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String, type::String, model_params; translator=nothing)
     
 
@@ -73,37 +52,15 @@ function GenMPO(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String, t
         H, L, R = load(dir*name, "H", "L", "R")
         return H, L, R
     else
-        model = type=="two" ? Model("fqhe_2b_pot") : Model("fqhe_gen")
+        model = Model("fqhe_2b_pot")
 
-        infMPO = type == "three" ? InfiniteMPOMatrix(model, s, translator;  dict_coeffs= model_params) : InfiniteMPOMatrix(model, s, translator; model_params...) 
+        infMPO = InfiniteMPOMatrix(model, s, translator; model_params...) 
         (H, L ,R), _, _  = ITensorInfiniteMPS.compress_impo(infMPO, projection =  1, cutoff = 1e-10, verbose = true, max_iter = 500)
         save(dir*name, "H", H, "L", L, "R", R)
         return H, L, R
     end
 end;   
 
-#=
-function MPOThreeBody(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String; translator=nothing)
-    
-    dir = "DMRG\\Data\\InfMPO\\InfMPO_3body\\"
-    name = "Ly$(Ly)_Vs$(Vs)_root$(tag).jld2"
-
-    if isfile(dir*name)
-        H, L, R = load(dir*name, "H", "L", "R")
-        return H, L, R
-    else
-        model = Model("fqhe_gen")
-        coeff = Generate_IdmrgCoeff(Ly, Vs; prec=1e-9, PHsym=false)
-        
-        MPO1 = InfiniteMPOMatrix(model, s, translator; dict_coeffs=coeff)
-
-        println("Compressing the MPO")
-        (H, L ,R), _, _ = ITensorInfiniteMPS.compress_impo(MPO1, projection = 1, cutoff = 1e-8, verbose = true, max_iter = 500)
-        save(dir*name, "H", copy(H), "L", copy(L), "R", copy(R))
-        return copy(H), L, R
-    end
-end;
-=#
 #################################
 #################################
 
@@ -193,7 +150,6 @@ end
 function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, V::Vector{Float64}; prec=1e-10)
 
     s = generate_basic_FQHE_siteinds(3, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_laugh)
-
     params = (Ly = Ly, Vs = V, prec = prec)
     H, L, R = GenMPO(s, Ly, V, RootPattern_to_string(RootPattern;first_term="Laughlin"), "two", params; translator=fermion_momentum_translater_laugh)
 
