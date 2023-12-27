@@ -32,7 +32,7 @@ function topologicalShift(RootPattern::Vector{Int64})
 end
 
 
-function BerryPhase(rp::Vector{Int64}, L::Float64; χ::Int64, θ::Float64, tag::String, Ncell::Int64, Nτ::Int64, kwargs...)
+function BerryPhase(rp::Vector{Int64}, L::Float64; χ::Int64, θ::Float64, tag::String, Ncell::Int64, Nτ::Int64, cut::Int64, kwargs...)
 
 
     path = "DMRG/Data/$(tag)Infinite/"
@@ -48,7 +48,7 @@ function BerryPhase(rp::Vector{Int64}, L::Float64; χ::Int64, θ::Float64, tag::
     dmrgStruct = load(path*"MES/"*name, "dmrgStruct")
     ψ = dmrgStruct.ψ    
     
-    return DehnTwist(ψ, Ncell, shift, path*"BlockMPS/Ncell$(Ncell)_"*name, L; kwargs...)
+    return DehnTwist(ψ, Ncell, shift, path*"BlockMPS/Ncell$(Ncell)_cut$(cut)_"*name, L, cut; kwargs...)
 end
 
 function BerryPhase(rp::Vector{Int64}; setL::LinRange{Float64, Int64}, kwargs...)
@@ -70,32 +70,13 @@ function BerryPhase(;setRP::Vector{Vector{Int64}}, kwargs...)
 
         println("\n####################################\n          Root pattern : $(RootPattern_to_string(rp))   \n####################################\n")
         flush(stdout)
-        #=
-        name = "DMRG/Data/LaughlinInfinite/test/frp$(RootPattern_to_string(rp))_Flux$(round(kwargs[16], digits=5)).jld2"
-        el = []
-        if isfile(name)
-            el = load(name, "berry")
-        else
-            
-            save(name, "berry", el)
-        end
-        =#
+
         el = BerryPhase(rp; kwargs...)
         DictB[rp] = el
 
     end
 
     return DictB
-end
-
-
-function plotBerryPhase(setL::Vector{Float64}, DictDT::Dict)
-
-    setFit = setfit(setL, DictDT)
-
-    fig = plot()
-
-
 end
 
 
@@ -111,7 +92,7 @@ function topologicalProperties(setL, BerryPhaseD, phiX)
             flag = true
         end
         dictFit[k] = fit 
-        eta = π^2*4*fit[2]
+        eta = 2*π^2*4*fit[2]
 
         modular = fit[1]
         #assuming central charge 1/24
@@ -126,8 +107,9 @@ function topologicalProperties(setL, BerryPhaseD, phiX)
         println("h₀- h₁ = $((dictFit[[2,1,1]][1]-dictFit[[1,2,1]][1]))")
         println("h₀- h₂ = $((dictFit[[2,1,1]][1]-dictFit[[1,1,2]][1]))")
         println("h₁- h₂ = $((dictFit[[1,2,1]][1]-dictFit[[1,1,2]][1]))")
+    else
+        println("h₀- h₁ = $((dictFit[[2,2,1,1]][1]-dictFit[[2,1,2,1]][1]))")
     end
-
     return dictFit
 end
     
