@@ -154,7 +154,8 @@ end;
 #  three body  #
 ################
 
-function build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=1e-12)
+function build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=1e-12, gap=false)
+    renorm = gap ? sqrt(0.07216878367598695) : 1.
     coefficients = Dict{Tuple{Int64,Int64},Float64}()
     for g in 0:2
       for (k, q) in Iterators.product((-3N_phi - g):3:(3N_phi - 1), (-3N_phi - g):3:(3N_phi - 1))
@@ -162,27 +163,12 @@ function build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=1e
           sqrt(Lx / Ly) / sqrt(N_phi) *
           (2 * pi / Ly)^3 *
           W_polynomial(k / 3, q / 3, -k / 3 - q / 3) *
-          exp(-2 * pi^2 / Ly^2 * ((k / 3)^2 + (q / 3)^2 + (-k / 3 - q / 3)^2))
+          exp(-2 * pi^2 / Ly^2 * ((k / 3)^2 + (q / 3)^2 + (-k / 3 - q / 3)^2))/renorm
       end
     end
     return coefficients
 end
   
-
-function build_three_body_coefficient_factorized_torus(Lx, Ly, N_phi, maximalMoment::Int64; prec=1e-12)
-    coefficients = Dict{Tuple{Int64, Int64}, Float64}()
-    nmax=15
-    for g = 0:2
-        for (k, q) = Iterators.product(-3N_phi-g:3:3N_phi-1, -3N_phi-g:3:3N_phi-1)
-             temp = 0.
-            for (n_1, n_2) = Iterators.product(-nmax:nmax, -nmax:nmax)
-                temp+= sqrt(Lx/Ly)/sqrt(N_phi)*(2*pi/Ly)^3 * W_polynomial(k/3 + n_1*N_phi, q/3+n_2*N_phi, -k/3-q/3-(n_1+n_2)*N_phi)*exp(-2*pi^2/Ly^2*( (k/3 + n_1*N_phi)^2 + (q/3 + n_2*N_phi)^2 + (-k/3 - q/3 - (n_1+ n_2)*N_phi)^2 ) )
-            end
-            coefficients[(k, q)] = temp/sqrt(0.07216878367598695)
-        end
-    end
-    return coefficients
-end
   
 function streamline_three_body_dictionnary_cylinder(dic, N_phi)
     coefficients = Dict{Tuple{Int64,Int64,Int64},Float64}()
@@ -227,6 +213,7 @@ function build_three_body_pseudopotentials(;
     N_phi::Int64=10,
     prec=1e-12,
     global_sign=1,
+    gap = false
   )
     if Lx != -1
       println("Generating 3 body pseudopotential coefficients from Lx")
@@ -258,7 +245,7 @@ function build_three_body_pseudopotentials(;
     )
     flush(stdout)
 
-    coeff = build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=prec)
+    coeff = build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=prec, gap=gap)
     coeff = streamline_three_body_dictionnary_cylinder(coeff, N_phi)
     coeff = build_hamiltonian_from_three_body_factorized_streamlined_dictionary(coeff, N_phi; global_sign=global_sign, prec=prec)
     return coeff
@@ -276,6 +263,7 @@ function Generate_OptIdmrg(Ly; prec=1e-10)
         opt = filter_optimized_Hamiltonian_by_first_siteGen(opt; pos=1, n=0)
         
         test = check_max_range_optimized_Hamiltonian(opt; check=1)
+
         if rough_N > test
           return opt
         end
@@ -340,7 +328,7 @@ function Generate_4Body(; r::Float64=1.0, Lx::Float64=-1.0, Ly::Float64=-1.0, N_
 end
 
 function projectors_four_body_parallel(Lx, Ly, N_Φ; prec=1e-12)
-    prefactor = sqrt(Lx / Ly) / sqrt(N_Φ) * (2 * pi / Ly)^4
+    prefactor = sqrt(Lx/Ly)*N_Φ*(2*pi/Ly)^5/sqrt(204.42908051834982)
     coefficients = [Dict{Tuple{Int64, Int64, Int64}, Float64}() for n in 1:Threads.nthreads()]
     for g = 0:3
         expFactor = zeros(length(collect(-4*N_Φ-g:4:4*N_Φ-1)))
@@ -426,26 +414,28 @@ end
 ####################################
  
 
-function Generate_Idmrg(Coeffs; prec=1e-10)
-    AllCoeff = [Dict{Vector{Int64}, Float64}() for i=1:length(collect(keys(Coeffs)))]
+function Generate_Idmrg(Coeffs; prec=1e-8)
+    AllCoeff = [Dict{Vector{Any}, Float64}() for i=1:length(collect(keys(Coeffs)))]
     i = 1
+    CoeffsNew = Dict()
+    println("Merging the coeffs for length $(length(Coeffs))")
+    flush(stdout)
     for (k, v) in Coeffs
         AllCoeff[i] = v
         i+= 1
     end
-    
-    Coeffs = merge(AllCoeff...)
-    
-    opt = optimize_coefficients(Coeffs;prec=prec)
+    AllCoeff = reduce(merge, AllCoeff)
+    opt = optimize_coefficients(AllCoeff; prec=prec)
     opt = filter_optimized_Hamiltonian_by_first_siteGen(opt; pos=2, n=1)
-
+    println("Coefficents generated")
+    flush(stdout)
     return opt
 end
 #############################
 #############################
 #############################
 
-function generate_Hamiltonian(mpo::OpSum, coeff::Dict; global_factor=1, prec=1e-12)
+function generate_Hamiltonian(mpo::OpSum, coeff::Dict; global_factor=1, prec=1e-7)
     for (k, v) in coeff
       if abs(v) > prec
         add!(mpo, global_factor * v, k...)
@@ -454,7 +444,7 @@ function generate_Hamiltonian(mpo::OpSum, coeff::Dict; global_factor=1, prec=1e-
     return mpo
 end;
   
-function generate_Hamiltonian(coeff::Dict; global_factor=1, prec=1e-12)
+function generate_Hamiltonian(coeff::Dict; global_factor=1, prec=1e-7)
     mpo = OpSum()
     return generate_Hamiltonian(mpo, coeff; global_factor=global_factor, prec=prec)
 end;

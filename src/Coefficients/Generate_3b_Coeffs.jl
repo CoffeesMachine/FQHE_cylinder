@@ -32,7 +32,7 @@ function fermion_momentum_translater_four(i::Index, n::Int64; N=4)
     return new_i
 end;
 
-function split_coeffs3B(dict; tol = 1e-8)
+function split_coeffs3B(dict; tol = 1e-12)
 	new_dic = Dict{Int64, Dict{Vector{Int64}, valtype(dict)}}()
 	for (k, v) in dict
 		abs(v) < tol && continue
@@ -78,23 +78,23 @@ function further_split_coeffs(coeffs, maxSize)
 end
 
 
-function run3B(RootPattern, Ly)
+function run3B(RootPattern, Ly; spectag=""; gap=false)
 
-    tag = RootPattern == [2,2,1,1] ? "1100" : "1010"
-    split_coeffs_name = "/scratch/bmorier/Coeff/Split_3b_Ly$(round(Ly, digits=5))_$(tag).jld2"
+    gapTag = tag ? "gap" : ""
+    tag = RootPattern == [2,2,1,1] ? "1100" : "1010"    
+    split_coeffs_name = "/scratch/bmorier/Coeff/Split_3b$(gapTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
     
     if !isfile(split_coeffs_name)
         s = generate_basic_FQHE_siteinds(4, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_four)
-        println("Number of threads is $(Threads.nthreads())")
 
 
         s3 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
-        CoeffName = "/scratch/bmorier/Coeff/Gen_3b_Ly$(round(Ly, digits=5))_$(tag).jld2"
+        CoeffName = "/scratch/bmorier/Coeff/Gen_3b$(gapTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
         
         Coeff = Dict()
         if !isfile(CoeffName)
-            println("Generating new coefficients for Ly = $(Ly)")
-            Coeff = build_three_body_pseudopotentials(;Ly=Ly, N_phi=Int64(2*Ly))
+            println("Generating new coefficients for Ly = $(Ly) with gap=$(gap)")
+            Coeff = build_three_body_pseudopotentials(;Ly=Ly, N_phi=round(Int64, 2*Ly), gap=gap)
             save(CoeffName, "coefficients_Gen", Coeff, "s", s3)
         else
             Coeff, s3 = load(CoeffName, "coefficients_Gen", "s")
@@ -102,11 +102,12 @@ function run3B(RootPattern, Ly)
 
         println("Split coefficients")
         new_coeffs = split_coeffs3B(Coeff)
-
+        
         coeffs2 = Dict()
         for (k, v) in new_coeffs
             coeffs2[k] = further_split_coeffs(v, 750)
         end
+        
         save(split_coeffs_name, "coeffs", coeffs2, "s", s3)
     else
         println("Coefficients already generated")

@@ -37,16 +37,27 @@ function RootPattern_to_string(RootPattern::Vector{Int64}; first_term="")
     return s
 end
 
-function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String, translator)
+function emptyMPO(V::Vector{Dict{Vector{Any}, Float64}})
+    ret =  Dict{Vector{Any}, Float64}[]
+    for el in V
+        isempty(el) && continue
+        push!(ret, el)
+    end
+    return ret
+end
 
-    tagType = type == "three" ? "3b" : "4b"
+
+function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String, translator; spectag="", gap=false)
+    
+    gapTag = gap ? "gap" : ""
+    tagType = type == "three" ? "3b"*gapTag : "4b"
     tag = RootPattern_to_string(rp) 
     DirAdd = type == "three" ? "" : "FourBody/"
     dir = "/scratch/bmorier/IMPO"
-    CoeffName =  "/scratch/bmorier/Coeff/Split_"*tagType*"_Ly$(round(Ly, digits=5))_$(tag).jld2"
+    CoeffName =  "/scratch/bmorier/Coeff/Split_"*tagType*"_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
     model = Model("fqhe_gen")
    
-    isfile(CoeffName) || Generate_Coeffs(rp, Ly, type)
+    isfile(CoeffName) || Generate_Coeffs(rp, Ly, type, spectag, gap)
 
     Coeff, s = load(CoeffName, "coeffs", "s")
     mpo_file = dir*DirAdd*"/Ly$(round(Ly, digits=5))_Int$(type)_RootPattern$(tag).jld2"
@@ -61,13 +72,15 @@ function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String, translator)
         println("Loading the MPO")
         flush(stdout)
         H, L, R, counter = load(mpo_file, "H", "L", "R", "counter")
-        println("Done $(counter-1)/$(length(Coeff))")
+        println("Done $(counter+1)/$(length(Coeff))")
         flush(stdout)
     else
         println("Starting $(counter+1)/$(length(Coeff))")
         flush(stdout)
     
-        coeff_ham = Generate_Idmrg(Coeff[counter])
+        @time coeff_ham = Generate_Idmrg(Coeff[counter])
+        println("starting infinite MPO")
+        flush(stdout)
         HMPO = InfiniteMPOMatrix(model, s, translator; dict_coeffs = coeff_ham)
         (H, L, R), _, _ = ITensorInfiniteMPS.compress_impo(HMPO, projection = 1, cutoff = 1e-10, verbose = true, max_iter = 500);
         save(mpo_file, "H", H,  "L", L, "R", R, "counter", 0);
@@ -78,6 +91,11 @@ function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String, translator)
         println("Starting $(m+1)/$(length(Coeff))")
         flush(stdout)
         coeff_ham = Generate_Idmrg(Coeff[m])
+        #@show typeof(coeff_ham)
+        #coeff_ham = emptyMPO(coeff_ham)
+
+        isempty(coeff_ham) && continue
+        
         HMPO_1 = InfiniteMPOMatrix(model, s, translator; dict_coeffs = coeff_ham);
         (H1, L1, R1), _, _ = ITensorInfiniteMPS.compress_impo(HMPO_1, projection = 1, cutoff = 1e-10, verbose = true, max_iter = 500);
 
@@ -95,12 +113,12 @@ function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String, translator)
 
 end
 
-function Generate_Coeffs(rp::Vector{Int64}, Ly::Float64, type::String) 
+function Generate_Coeffs(rp::Vector{Int64}, Ly::Float64, type::String, spectag, gap) 
     
     if type == "three" 
-        run3B(rp, Ly)
+        run3B(rp, Ly; spectag=spectag, gap=gap)
     elseif type == "four" 
-        run4B(rp, Ly)
+        run4B(rp, Ly; spectag=spectag)
     else
         println("type = $type")
         run3B(rp, Ly)
