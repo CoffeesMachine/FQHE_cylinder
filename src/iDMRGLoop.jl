@@ -9,24 +9,41 @@ idmrgLoop(; rp::Vector{Int64}, setL::LinRange{Float64, Int64}, tag::String, θ::
     
 idmrgLoop(rp::Vector{Int64}, L::Float64; tag::String, θ::Float64, kwargs...) = idmrgLoop(rp, L, tag, θ; kwargs...)
 
-function idmrgLoop(RootPattern::Vector{Int64}, Ly::Float64, tag::String, θ::Float64; setχ::Vector{Int64}, V2b::Vector{Float64}, V3b::Vector{Float64}, prec::Float64, maxIter::Int64, kwargs...)
+function idmrgLoop(RootPattern::Vector{Int64}, Ly::Float64, tag::String, θ::Float64; gap::Bool, reloadStruct::Bool, ChiTest::Int64, stepL::Float64, setχ::Vector{Int64}, V2b::Vector{Float64}, V3b::Vector{Float64}, prec::Float64, maxIter::Int64, kwargs...)
     
     println("Calulating for L=$(Ly)")
+    println("\n####################################\n          Theta : $(θ)   \n####################################\n")
+    flush(stdout)
+    path = "/scratch/bmorier/$(tag)/"
+    gapTag  = gap ? "gap_" : ""
+    nameN = path*gapTag*"$rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_Ly$(round(Ly, digits=5))_theta$(round(θ, digits=5))"
+    filename = gapTag*"rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_Ly$(round(Ly-stepL, digits=5))_theta$(round(θ, digits=5))_maxiters$(maxIter)_chi$(ChiTest)_alpha0.0.jld2"
     
-    path = "/scratch/bmorier/$(tag)/rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_"
-    nameN = path*"Ly$(round(Ly, digits=5))_theta$(round(θ, digits=5))"
-    filename = "rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_Ly$(round(Ly-1, digits=5))_theta$(round(θ, digits=5))_maxiters$(maxIter)_chi$(maximum(setχ))_alpha0.0.jld2"
-    savedpath =  path*"/scratch/bmorier/2b_3b/"*filename
-    
-    if !isfile(savedpath)
-        savedpath = path*"scratch/bmorier/saved/"*filename
+    if !reloadStruct
+        savedpath =  path*"sdfdgw"*filename
+        
+        if !isfile(savedpath)
+            savedpath = "scratch/bmorier/safed/"*filename
+        end
+
+        type = tag == "3b_4b" ? "four" : "three"
+
+        dmrgStruct = FQHE_idmrg(RootPattern, Ly, θ, type, savedpath; V2b=V2b, V3b=V3b, prec=prec gap=gap)
+
+        for χ in setχ
+            idmrgLoop(dmrgStruct, nameN, χ, maxIter; kwargs...)
+        end 
+    else
+        println("Reloading structure ")
+        flush(stdout)
+        filename = gapTag*"rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_Ly$(round(Ly, digits=5))_theta$(round(θ, digits=5))_maxiters$(maxIter)_chi$(ChiTest)_alpha0.0.jld2"
+        dmrgStruct = load(path*filename, "dmrgStruct")
+        
+        for χ in setχ
+            χ < ChiTest && continue
+            idmrgLoop(dmrgStruct, nameN, χ, maxIter; kwargs...)
+        end 
     end
-
-    dmrgStruct = FQHE_idmrg(RootPattern, Ly, θ, savedpath; V2b=V2b, V3b=V3b, prec=prec)
-
-    for χ in setχ
-        idmrgLoop(dmrgStruct, nameN, χ, maxIter; kwargs...)
-    end 
 end
 
 

@@ -11,16 +11,14 @@ include("src/TopologicalProperties.jl")
 index = parse(Int64, ARGS[1])
 
 function readInputFile(filename, index)
-    
+    setBoolean = ["tag", "FixL", "skipDT", "reloadStruct", "gap"]
     vars = Dict()
     open(filename) do ff
         for line in eachline(ff)
             var, val = split(line, " = ")
-            if var != "tag" && var != "FixL"
-                vars[strip(var)] = parse(Float64, val)
-            else
-                vars[strip(var)] = string(val)
-            end
+            
+            vars[strip(var)] = var in setBoolean ? string(val) :  parse(Float64, val)
+            
         end
     end
 
@@ -68,17 +66,24 @@ function readInputFile(filename, index)
         Nτ = Int64(vars["Nt"]),
         Φx = vars["FluxX"], 
         Φy = vars["FluxY"],
+        stepL = vars["stepL"],
+        ChiTest = Int64(vars["ChiTest"]),
         q = 4,
-        Ne_unitCell = 2
+        Ne_unitCell = 2,
+        skipDT = vars["skipDT"] == "true" ? true : false,
+        reloadStruct = vars["reloadStruct"] == "true" ? true : false, 
+        gap = vars["gap"] == "true" = true : false
     )
 
    return kwargs, TypeOfMeasure
 end
 
 function run(index)
-    filename = "ParametersFiles/PfaffianDehnTwist_T0_1100.in"
+    filename = "ParametersFiles/LocalTransition.in"
 
     kwargs, TypeOfMeasure = readInputFile(filename, index)
+    println("\n####################################\n          Root pattern : $(RootPattern_to_string(kwargs[1]))   \n####################################\n")
+    flush(stdout)
     if TypeOfMeasure == "Dehn twist"
         setL = kwargs[2]
 

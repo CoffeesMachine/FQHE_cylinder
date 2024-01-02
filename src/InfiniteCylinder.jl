@@ -38,7 +38,7 @@ end
 #################################
 #################################
 
-function GenMPO(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String, type::String, model_params; rp=nothing, translator=nothing)
+function GenMPOT(Ly::Float64, Vs::Array{Float64}, tag::String, type::String, model_params;spec="", s=nothing, rp=nothing, translator=nothing, gap = false)
     
     dir = "/scratch/bmorier/IMPO/"
     name= "Ly$(round(Ly, digits=5))_Interaction$(type)_RootPattern$(tag).jld2"
@@ -58,7 +58,7 @@ function GenMPO(s::CelledVector, Ly::Float64, Vs::Array{Float64}, tag::String, t
             return H, L, R, s
         end
     else
-        return Generate_MPO(rp, Ly, type, translator)
+        return Generate_MPO(rp, Ly, type, translator;spectag=spec, gap=gap)
     end
 
 end;   
@@ -113,7 +113,7 @@ end;
 #################################
 #################################
 
-function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, V2b::Vector{Float64}, V3b::Vector{Float64}; prec=1e-10)
+function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, V2b::Vector{Float64}, V3b::Vector{Float64}; prec=1e-10, gap=false)
 
     s = generate_basic_FQHE_siteinds(length(RootPattern), RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_four)
     
@@ -122,8 +122,8 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
     params_3b = 0.
     params_2b = (Ly = Ly, Vs = V2b, prec = prec)
 
-    H3, L3, R3, s3 = GenMPO(s2, Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b;rp=RootPattern, translator=fermion_momentum_translater_two)
-    H2, L2, R2, _ = GenMPO(s3, Ly, V2b, RootPattern_to_string(RootPattern), "two", params_2b; translator=fermion_momentum_translater_two)
+    H3, L3, R3, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b;s=s2, rp=RootPattern, translator=fermion_momentum_translater_two, gap=gap)
+    H2, L2, R2, _ = GenMPOT(Ly, V2b, RootPattern_to_string(RootPattern), "two", params_2b; s=s3, translator=fermion_momentum_translater_two)
     iMPO_3b = (H3, L3, R3)
     iMPO_2b = (H2, L2, R2)
    
@@ -143,12 +143,14 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
     ψ = InfMPS(s, initstate)
 
     H1, L1, R1 = cos(θ)*iMPO_3b + sin(θ)*iMPO_2b
+    println("ok")
+    flush(stdout)
     H, L, R = MPO_unitcell(copy(H1), copy(L1), copy(R1), length(RootPattern), ψ)
 
     return H, L, R, ψ
 end
 
-function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64; prec=1e-10)
+function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64; prec=1e-10, gap=false)
     
     tag = RootPattern_to_string(RootPattern; first_term="4B_")
     
@@ -163,16 +165,28 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
         end
     end
 
-
+    V3b = [0.]
     CellSize = length(RootPattern)
     
-    H4, L4, R4, s3 = GenMPO(Ly, tag, "four"; translator=fermion_momentum_translater_two)
+    params_4b=0.
+    H4, L4, R4, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "four", 0.0; spec="4B", rp=RootPattern, translator=fermion_momentum_translater_two, gap=false)
     iMPO_4b = (H4, L4, R4)
 
-    params_3b = (dict_coeffs = Generate_IdmrgCoeff(Ly, V3b; prec=prec, PHsym=false))
-    iMPO_3b = GenMPO(s3, Ly,[0.; 0.; 1.], tag, "three"; translator=fermion_momentum_translater_two)
-
+    params_3b =0
+    H3, L3, R3, _  = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; spec="4B", s=s3, rp=RootPattern, translator=fermion_momentum_translater_two, gap=gap)
+    iMPO_3b = (H3, L3, R3)
     s = MPS_unitcell(s3)
+
+    s4 = siteinds(H4)
+    s3 = siteinds(H3)
+
+    for n in 1:4
+        replaceind!(H3[n], dag(s3[n]), dag(s4[n]))
+        replaceind!(H3[n], prime(s3[n]), prime(s4[n]))
+    end
+
+
+
 
     ψ = InfMPS(s, initstate)
 
@@ -190,22 +204,23 @@ function prepareMPO(H, L, R, ψ1)
     newH = copy(H)
 	temp_L = copy(L)
 
-
 	for j in 1:length(L)
+      
     	llink = only(commoninds(ψ.AL[0], ψ.AL[1]))
+        @show llink
     	temp_L[j] = temp_L[j] * δ(llink, dag(prime(llink)))
 	end
-
-	temp_R = copy(R)
+	
+    temp_R = copy(R)
 	for j in 1:length(R)
+       
     	rlink = only(commoninds(ψ.AR[nsites(ψ)+1], ψ.AR[nsites(ψ)]))
     	temp_R[j] = temp_R[j] * δ(rlink, dag(prime(rlink)))
 	end
-
-	for j in 1:nsites(ψ)
+	
+    for j in 1:nsites(ψ)
     	newH.data.data[j][end, 1] .+= -1*op("N", sp[j])
 	end
-
 	ITensorInfiniteMPS.fuse_legs!(newH, temp_L, temp_R)
 	newH, newL, newR = ITensorInfiniteMPS.convert_impo(newH, copy(temp_L), copy(temp_R));
 
@@ -216,69 +231,34 @@ function prepareMPO(H, L, R, ψ1)
     return dmrgStruct
 end
 
-function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, type::String, SavePath::String = ""; V2b::Vector{Float64}=[1.], V3b::Vector{Float64}=[0., 0., 1.], prec=1e-10)
+function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, type::String, SavePath::String = ""; V2b::Vector{Float64}=[1.], V3b::Vector{Float64}=[0., 0., 1.], prec=1e-10, gap=false)
 
     H = 0; L = 0; R = 0; ψ=0;
     
     if type != "four"
-        H, L, R, ψ = GenerateBasicStructure(RootPattern, Ly, θ, V2b, V3b; prec=prec)
+        H, L, R, ψ = GenerateBasicStructure(RootPattern, Ly, θ, V2b, V3b; prec=prec, gap=gap)
     else
-        H, L, R, ψ = GenerateBasicStructure(RootPattern, Ly, θ; prec=prec)
+        H, L, R, ψ = GenerateBasicStructure(RootPattern, Ly, θ; prec=prec, gap=gap)
     end
 
     if SavePath != "" && isfile(SavePath)
         println("Loading smaller State")
         flush(stdout)
+        oldDmrg = load(SavePath, "dmrgStruct")
         ψ1 = oldDmrg.ψ
         sh = siteinds(ψ1)
-        so = siteinds(sH)
-    
+        so = siteinds(H)
+        println(sh)
+        println(so)
+        flush(stdout)
         for n in 1:4
-            replaceind!(newH[n], dag(so[n]), dag(sh[n]))
-            replaceind!(newH[n], prime(so[n]), prime(sh[n]))
+            replaceind!(H[n], dag(so[n]), dag(sh[n]))
+            replaceind!(H[n], prime(so[n]), prime(sh[n]))
         end
 
         ψ = copy(ψ1)
     end 
-
+    println(siteinds(H))
+    flush(stdout)
     return prepareMPO(H, L, R, ψ)
 end
-
-
-
-
-
-###############################################################
-#    Pfaffian and Laughlin states, not to be used there       #
-###############################################################
-#=
-
-function GenerateBasicStructureOld(RootPattern::Vector{Int64}, Ly::Float64, V::Vector{Float64}; prec=1e-10)
-
-    s = generate_basic_FQHE_siteinds(3, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_laugh)
-
-    params = (Ly = Ly, Vs = V, prec = prec)
-    H, L, R = GenMPO(s, Ly, V, RootPattern_to_string(RootPattern; first_term="Laughlin"), "two", params; translator=fermion_momentum_translater_laugh)
-
-
-    function initstate(n; pose_e=findmax(RootPattern)[2])
-        if mod(n, 3) == mod(pose_e, 3)
-            return 2
-        else
-            return 1
-        end
-    end
-
-    ψ = InfMPS(s, initstate)
-
-    return H, L, R, ψ
-end
-
-function InfCylinderStructOld(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, V2b::Vector{Float64}, V3b::Vector{Float64}; prec=1e-10)
-    if length(RootPattern) == 3
-        return GenerateBasicStructure(RootPattern, Ly, V2b, prec=prec)
-    else
-        return GenerateBasicStructure(RootPattern, Ly, θ, V3b, V3b; prec=prec)
-    end
-end
-=#

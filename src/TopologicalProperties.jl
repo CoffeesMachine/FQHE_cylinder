@@ -34,12 +34,14 @@ end
 function BerryPhase(rp::Vector{Int64}, L::Float64; χ::Int64, θ::Float64, tag::String, Ncell::Int64, Nτ::Int64, kwargs...)
 
     path = "/scratch/bmorier/$(tag)/"
-    
-    name = "rp$(RootPattern_to_string(rp))_chiMax1024_Ly$(round(L, digits=5))_theta0.0_maxiters100_chi$(χ)_alpha0.0.jld2"
+    println(kwargs[end])
+    flush(stdout)
+    gapTag = kwargs[end] ? "gap_" : ""
+    name = gapTag*"rp$(RootPattern_to_string(rp))_chiMax$(maximum(kwargs[1]))_Ly$(round(L, digits=5))_theta$(round(θ, digits=5))_maxiters100_chi$(χ)_alpha0.0.jld2"
 
     #check is there is a file, if not run idmrg loop
     !isfile(path*name) && idmrgLoop(rp, L, tag, θ; kwargs...)
-
+   
     #calculate berryPhase due to modular T transform
     println("\nCalculating Dehn twist for L = $(L)")
     flush(stdout)
@@ -53,9 +55,8 @@ function BerryPhase(rp::Vector{Int64}, L::Float64; χ::Int64, θ::Float64, tag::
 end
 
 
-function BerryPhase(rp::Vector{Int64}; setL, kwargs...)
+function BerryPhase(rp::Vector{Int64}; skipDT, setL, kwargs...)
     setBerry = []
-    skipDT = true
     for L in setL
         if skipDT 
             idmrgLoop(rp, L; kwargs...)
@@ -72,8 +73,6 @@ end
 function BerryPhase(;rp::Vector{Int64}, kwargs...)
     
     DictB = Dict()
-    println("\n####################################\n          Root pattern : $(RootPattern_to_string(rp))   \n####################################\n")
-    flush(stdout)
 
     DictB[rp] = BerryPhase(rp; kwargs...)
     return DictB
