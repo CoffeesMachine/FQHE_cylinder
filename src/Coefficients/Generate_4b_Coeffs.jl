@@ -32,7 +32,7 @@ function fermion_momentum_translater_four(i::Index, n::Int64; N=4)
     return new_i
 end;
 
-function split_coeffs(dict; tol = 1e-8)
+function split_coeffs(dict; tol = 1e-7)
 	
 	new_dic = Dict{Int64, Dict{Vector{Int64}, valtype(dict)}}()
 	for (k, v) in dict
@@ -40,7 +40,7 @@ function split_coeffs(dict; tol = 1e-8)
 		if k[1] + k[2] + k[3] + k[4] != k[5] + k[6] + k[7] + k[8]
 			error("")
 		end
-		m = abs(k[5]-k[1])
+		m = abs(k[8]-k[1])
 		if !haskey(new_dic, m)
 			new_dic[m] = Dict{Vector{Int64}, valtype(dict)}()
 		end
@@ -50,18 +50,18 @@ function split_coeffs(dict; tol = 1e-8)
 end
 
 
-function run4B(RootPattern, Ly)
+function run4B(RootPattern, Ly; spectag="")
 
     tag = RootPattern == [2,2,1,1] ? "1100" : "1010"
-    split_coeffs_name = "/scratch/bmorier/Coeff/Split_4b_Ly$(Ly)_$(tag).jld2"
+    split_coeffs_name = "/scratch/bmorier/Coeff/Split_4b_Ly$(Ly)_$(tag)$(spectag).jld2"
     
     if !isfile(split_coeffs_name)
-        s = generate_basic_FQHE_siteinds(4, RP; conserve_momentum=true, translator=fermion_momentum_translater_four)
+        s = generate_basic_FQHE_siteinds(4, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_four)
         println("Number of threads is $(Threads.nthreads())")
 
 
         s3 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
-        CoeffName = "/scratch/bmorier/Coeff/Gen_4b_Ly$(Ly)_$(tag).jld2"
+        CoeffName = "/scratch/bmorier/Coeff/Gen_4b_Ly$(Ly)_$(tag)$(spectag).jld2"
         
         Coeff = Dict()
         if !isfile(CoeffName)
