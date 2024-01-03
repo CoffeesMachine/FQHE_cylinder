@@ -31,11 +31,11 @@ function fermion_momentum_translater_four(i::Index, n::Int64; N=4)
 end;
 
 
-function plotFidelity(setPsi, setTheta, chi, Ly; savefig=true)
+function Fidelity(setPsi::Vector{InfiniteCanonicalMPS}, setTheta::LinRange{Float64, Int64})
     setλ = []
     setθ = [0.5*(setTheta[i+1]+setTheta[i]) for i in 1:(length(setTheta)-1)]
 
-    for j in 1:(length(idmrgStruct)-1)
+    for j in 1:(length(setPsi)-1)
         
         ψ1 = setPsi[j]
         ψ2 = setPsi[j+1]
