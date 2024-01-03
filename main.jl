@@ -72,14 +72,14 @@ function readInputFile(filename, index)
         Ne_unitCell = 2,
         skipDT = vars["skipDT"] == "true" ? true : false,
         reloadStruct = vars["reloadStruct"] == "true" ? true : false, 
-        gap = vars["gap"] == "true" = true : false
+        gap = vars["gap"] == "true" ? true : false
     )
 
    return kwargs, TypeOfMeasure
 end
 
 function run(index)
-    filename = "ParametersFiles/LocalTransition.in"
+    filename = "ParametersFiles/Transition3b4b.in"
 
     kwargs, TypeOfMeasure = readInputFile(filename, index)
     println("\n####################################\n          Root pattern : $(RootPattern_to_string(kwargs[1]))   \n####################################\n")

@@ -78,9 +78,9 @@ function further_split_coeffs(coeffs, maxSize)
 end
 
 
-function run3B(RootPattern, Ly; spectag=""; gap=false)
+function run3B(RootPattern, Ly; spectag="", gap=false)
 
-    gapTag = tag ? "gap" : ""
+    gapTag = gap ? "gap" : ""
     tag = RootPattern == [2,2,1,1] ? "1100" : "1010"    
     split_coeffs_name = "/scratch/bmorier/Coeff/Split_3b$(gapTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
     

@@ -60,7 +60,7 @@ function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String, translator; 
     isfile(CoeffName) || Generate_Coeffs(rp, Ly, type, spectag, gap)
 
     Coeff, s = load(CoeffName, "coeffs", "s")
-    mpo_file = dir*DirAdd*"/Ly$(round(Ly, digits=5))_Int$(type)_RootPattern$(tag).jld2"
+    mpo_file = dir*DirAdd*gapTag*"/Ly$(round(Ly, digits=5))_Int$(type)_RootPattern$(tag).jld2"
 
     H = 0; 
     L = 0; 

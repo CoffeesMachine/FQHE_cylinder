@@ -124,6 +124,17 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
 
     H3, L3, R3, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b;s=s2, rp=RootPattern, translator=fermion_momentum_translater_two, gap=gap)
     H2, L2, R2, _ = GenMPOT(Ly, V2b, RootPattern_to_string(RootPattern), "two", params_2b; s=s3, translator=fermion_momentum_translater_two)
+    
+    s3 = siteinds(H3)
+    s2 = siteinds(H2)
+
+    for n in 1:4
+        replaceind!(H2[n], dag(s2[n]), dag(s3[n]))
+        replaceind!(H2[n], prime(s2[n]), prime(s3[n]))
+    end
+    
+    
+    
     iMPO_3b = (H3, L3, R3)
     iMPO_2b = (H2, L2, R2)
    

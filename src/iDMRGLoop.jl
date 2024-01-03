@@ -16,11 +16,11 @@ function idmrgLoop(RootPattern::Vector{Int64}, Ly::Float64, tag::String, θ::Flo
     flush(stdout)
     path = "/scratch/bmorier/$(tag)/"
     gapTag  = gap ? "gap_" : ""
-    nameN = path*gapTag*"$rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_Ly$(round(Ly, digits=5))_theta$(round(θ, digits=5))"
+    nameN = path*gapTag*"rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_Ly$(round(Ly, digits=5))_theta$(round(θ, digits=5))"
     filename = gapTag*"rp$(RootPattern_to_string(RootPattern))_chiMax$(maximum(setχ))_Ly$(round(Ly-stepL, digits=5))_theta$(round(θ, digits=5))_maxiters$(maxIter)_chi$(ChiTest)_alpha0.0.jld2"
     
     if !reloadStruct
-        savedpath =  path*"sdfdgw"*filename
+        savedpath =  path*filename
         
         if !isfile(savedpath)
             savedpath = "scratch/bmorier/safed/"*filename
@@ -28,7 +28,7 @@ function idmrgLoop(RootPattern::Vector{Int64}, Ly::Float64, tag::String, θ::Flo
 
         type = tag == "3b_4b" ? "four" : "three"
 
-        dmrgStruct = FQHE_idmrg(RootPattern, Ly, θ, type, savedpath; V2b=V2b, V3b=V3b, prec=prec gap=gap)
+        dmrgStruct = FQHE_idmrg(RootPattern, Ly, θ, type, savedpath; V2b=V2b, V3b=V3b, prec=prec, gap=gap)
 
         for χ in setχ
             idmrgLoop(dmrgStruct, nameN, χ, maxIter; kwargs...)
