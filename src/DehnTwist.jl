@@ -70,7 +70,7 @@ function DehnTwist(ψ::InfiniteCanonicalMPS, N_cell::Int64, topologicalShift::In
     rangeT = (cut+1):(q*N_cell+cut)
     ψT = ψ.AR[rangeT]
 
-
+    #=
     BlockMPS = 0
     if isfile(namesave)
         BlockMPS = load(namesave, "block")
@@ -80,7 +80,7 @@ function DehnTwist(ψ::InfiniteCanonicalMPS, N_cell::Int64, topologicalShift::In
     end
 
     setMPS = [TwistOperator(rangeT, ψ, 0.0, topologicalShift, q, Φx, cut; kwargs...), TwistOperator(rangeT, ψ, 1., topologicalShift, q, Φx, cut; kwargs...)]
-
+    =#
     O = ((Φx/2π)^2 - Φx/2π + 1/6)/(2*3)
     #W = BerryConnection(BlockMPS, copy(setMPS[2]), copy(setMPS[1]))
     # C_mean = test(ψ)
@@ -88,7 +88,7 @@ function DehnTwist(ψ::InfiniteCanonicalMPS, N_cell::Int64, topologicalShift::In
     # @show imag(log(W))
 
 
-    BerryFac =  K(ψ, topologicalShift, Φx, q) - 1/(24*3)
+    BerryFac =  -K(ψ, topologicalShift, Φx, q) - 1/(24*3)
     Berry = BerryFac
     return Berry
    
@@ -109,11 +109,12 @@ function K(ψ, topologicalShift, Φx, q)
         for y in 1:qn[2] 
             KN = qn[1][2].val
             NN = qn[1][1].val
-            
-            Kloc = (KN -topologicalShift+0.5*NN)/q
+            fluxShift = Φx==0 ? NN/2 : 0.
+
+            Kloc = (KN - topologicalShift + fluxShift)/q
 
 
-            Hloc += S[n,n]^2*(-Kloc)
+            Hloc += S[n,n]^2*(Kloc)
             
             n += 1
         end
