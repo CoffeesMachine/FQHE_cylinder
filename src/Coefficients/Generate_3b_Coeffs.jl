@@ -8,7 +8,7 @@ include("/home/bmorier/DMRG/FQHE_cylinder/src/MatrixElement.jl")
 include("/home/bmorier/DMRG/ITensorInfiniteMPS.jl/src/models/fqhe13.jl")
 
 
-function fermion_momentum_translater_two(i::Index, n::Int64; N=2)
+function fermion_momentum_translater_General(i::Index, n::Int64, N)
     ts = tags(i)
     translated_ts = translatecelltags(ts, n)
     new_i = replacetags(i, ts => translated_ts)
@@ -20,17 +20,22 @@ function fermion_momentum_translater_two(i::Index, n::Int64; N=2)
     return new_i
 end;
 
-function fermion_momentum_translater_four(i::Index, n::Int64; N=4)
-    ts = tags(i)
-    translated_ts = translatecelltags(ts, n)
-    new_i = replacetags(i, ts => translated_ts)
-    for j in 1:length(new_i.space)
-    ch = new_i.space[j][1][1].val
-    mom = new_i.space[j][1][2].val
-    new_i.space[j] = Pair(QN(("Nf", ch ), ("NfMom", mom + n*N*ch)),  new_i.space[j][2])
+fermion_momentum_translater_laugh(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 3)
+
+fermion_momentum_translater_six(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 6)
+
+fermion_momentum_translater_two(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 2)
+
+fermion_momentum_translater_four(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 4)
+
+
+function RootPattern_to_string(RootPattern::Vector{Int64}; first_term="")
+    s = ""*first_term
+    for el in RootPattern
+        s *= string(el-1)
     end
-    return new_i
-end;
+    return s
+end
 
 function split_coeffs3B(dict; tol = 1e-12)
 	new_dic = Dict{Int64, Dict{Vector{Int64}, valtype(dict)}}()
@@ -80,15 +85,20 @@ end
 
 function run3B(RootPattern, Ly; spectag="", gap=false)
 
+    translatorGeneral = length(RootPattern) == 4 ? fermion_momentum_translater_four : fermion_momentum_translater_six
+    translatorUnit = length(RootPattern) == 4 ? fermion_momentum_translater_two : fermion_momentum_translater_laugh
+
     gapTag = gap ? "gap" : ""
-    tag = RootPattern == [2,2,1,1] ? "1100" : "1010"    
+    tag = RootPattern_to_string(RootPattern)
+    
+    
     split_coeffs_name = "/scratch/bmorier/Coeff/Split_3b$(gapTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
     
     if !isfile(split_coeffs_name)
-        s = generate_basic_FQHE_siteinds(4, RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_four)
+        s = generate_basic_FQHE_siteinds(length(RootPattern), RootPattern; conserve_momentum=true, translator=translatorGeneral)
 
 
-        s3 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
+        s3 = CelledVector([deepcopy(s[Int64(i)]) for i=1:length(RootPattern)/2], translatorUnit)
         CoeffName = "/scratch/bmorier/Coeff/Gen_3b$(gapTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
         
         Coeff = Dict()

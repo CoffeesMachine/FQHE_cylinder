@@ -22,7 +22,19 @@ function readInputFile(filename, index)
         end
     end
 
-    RP = vars["rp"] == 2. ? [2,2,1,1] : [2,1,2,1]
+    RP = Int64[]
+    tagRP = vars["rp"]
+    if tagRP == 1. 
+        RP = [2,1,2,1]
+    elseif tagRP == 2.
+        RP = [2,2,1,1]
+    elseif tagRP == 3.
+        RP = [2,1,1,2,1,1]
+    elseif tagRP == 4. 
+        RP = [1,2,1,1,2,1]
+    elseif tagRP == 5. 
+        RP = [1,1,2,1,1,2]
+    end
 
     setL = LinRange(vars["Lmin"], vars["Lmax"], Int64(vars["NL"]))
     setT = LinRange(vars["thetamin"], vars["thetamax"], Int64(vars["NT"]))
@@ -79,7 +91,7 @@ function readInputFile(filename, index)
 end
 
 function run(index)
-    filename = "ParametersFiles/Transition3b4b.in"
+    filename = "ParametersFiles/Phase.in"
 
     kwargs, TypeOfMeasure = readInputFile(filename, index)
     println("\n####################################\n          Root pattern : $(RootPattern_to_string(kwargs[1]))   \n####################################\n")

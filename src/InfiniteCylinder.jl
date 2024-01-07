@@ -21,6 +21,8 @@ end;
 
 fermion_momentum_translater_laugh(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 3)
 
+fermion_momentum_translater_six(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 6)
+
 fermion_momentum_translater_two(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 2)
 
 fermion_momentum_translater_four(i::Index, n::Int64) = fermion_momentum_translater_General(i, n, 4)
@@ -58,7 +60,7 @@ function GenMPOT(Ly::Float64, Vs::Array{Float64}, tag::String, type::String, mod
             return H, L, R, s
         end
     else
-        return Generate_MPO(rp, Ly, type, translator;spectag=spec, gap=gap)
+        return Generate_MPO(rp, Ly, type;spectag=spec, gap=gap)
     end
 
 end;   
@@ -66,26 +68,26 @@ end;
 #################################
 #################################
 
-function MPS_unitcell(s1)
-    newSet = [deepcopy(s1[x]) for x=1:4]
+function MPS_unitcell(s1, nsites::Int64)
+    newSet = [deepcopy(s1[x]) for x=1:nsites]
     ss = []
     for n=1:2
-        for l=1:2
-            x = 2*(n-1)+l
+        for l=1:div(nsites, 2)
+            x = div(nsites,2)*(n-1)+l
             push!(ss, replacetags(newSet[x], "c=$(n),n=$(l)", "c=1,n=$(x)"))
         end
     end
-    return CelledVector(ss, fermion_momentum_translater_four)
+    translatorLoc = nsites==4 ? fermion_momentum_translater_four : fermion_momentum_translater_six
+    return CelledVector(ss, translatorLoc)
 end;
 
 function MPO_unitcell(H, L, R, TargetSize::Int64, ψ)
     sp = siteinds(ψ)
     sh = siteinds(H)
     cellSize = nsites(H)
-    @assert cellSize == 2
 
     R2 = translatecell(fermion_momentum_translater_two, R, 1)
-    newH = [deepcopy(H[x]) for x=1:4]
+    newH = [deepcopy(H[Int64(x)]) for x=1:2*cellSize]
     
     for n in 1:2
         for l in 1:cellSize
@@ -106,7 +108,8 @@ function MPO_unitcell(H, L, R, TargetSize::Int64, ψ)
     replacetags!(R2[2], "Link,c=2,n=$(cellSize)", "Link,c=1,n=$(TargetSize)")
     replacetags!(L[2], "Link,c=0,n=$(cellSize)", "Link,c=0,n=$(TargetSize)")
     R = R2
-    newH = InfiniteMPOMatrix(newH, fermion_momentum_translater_four)
+    translatorLoc = cellSize == 2 ? fermion_momentum_translater_four : fermion_momentum_translater_six
+    newH = InfiniteMPOMatrix(newH, translatorLoc)
     return newH, L, R  
 end;
 
@@ -115,20 +118,26 @@ end;
 
 function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, V2b::Vector{Float64}, V3b::Vector{Float64}; prec=1e-10, gap=false)
 
-    s = generate_basic_FQHE_siteinds(length(RootPattern), RootPattern; conserve_momentum=true, translator=fermion_momentum_translater_four)
+    NS = length(RootPattern)
     
-    s3 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
-    s2 = CelledVector([deepcopy(s[1]), deepcopy(s[2])], fermion_momentum_translater_two)
+    GeneralTranslator = NS == 4 ? fermion_momentum_translater_four : fermion_momentum_translater_six
+    translatorUnit = NS == 4 ? fermion_momentum_translater_two : fermion_momentum_translater_laugh
+
+    s = generate_basic_FQHE_siteinds(NS, RootPattern; conserve_momentum=true, translator=GeneralTranslator)
+
+    s3 = CelledVector([deepcopy(s[i]) for i in 1:div(NS, 2)], translatorUnit)
+    s2 = CelledVector([deepcopy(s[i]) for i in 1:div(NS, 2)], translatorUnit)
+    
     params_3b = 0.
     params_2b = (Ly = Ly, Vs = V2b, prec = prec)
 
-    H3, L3, R3, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b;s=s2, rp=RootPattern, translator=fermion_momentum_translater_two, gap=gap)
-    H2, L2, R2, _ = GenMPOT(Ly, V2b, RootPattern_to_string(RootPattern), "two", params_2b; s=s3, translator=fermion_momentum_translater_two)
+    H3, L3, R3, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; s=s2, rp=RootPattern, translator=translatorUnit, gap=gap)
+    H2, L2, R2, _ = GenMPOT(Ly, V2b, RootPattern_to_string(RootPattern), "two", params_2b; s=s3, translator=translatorUnit)
     
     s3 = siteinds(H3)
     s2 = siteinds(H2)
 
-    for n in 1:4
+    for n in 1:div(NS, 2)
         replaceind!(H2[n], dag(s2[n]), dag(s3[n]))
         replaceind!(H2[n], prime(s2[n]), prime(s3[n]))
     end
@@ -138,17 +147,11 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
     iMPO_3b = (H3, L3, R3)
     iMPO_2b = (H2, L2, R2)
    
-    s = MPS_unitcell(s3)
-
+    s = MPS_unitcell(s3, NS)
+    @show s
     function initstate(n)
-        if RootPattern == [2,2,1,1]
-            return mod(n, 5) <= 2 ? 2 : 1
-        elseif RootPattern == [2,1,2,1]
-            return mod(n, 2) == 1 ? 2 : 1
-        else
-            println("Pattern not implemented yet")
-            return -1
-        end
+        setVal = findall(x-> x==2, RootPattern)
+        return mod(n, length(RootPattern)) in setVal ? 2 : 1
     end
 
     ψ = InfMPS(s, initstate)
@@ -166,32 +169,29 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
     tag = RootPattern_to_string(RootPattern; first_term="4B_")
     
     function initstate(n)
-        if RootPattern == [2,2,1,1]
-            return mod(n, 5) <= 2 ? 2 : 1
-        elseif RootPattern == [2,1,2,1]
-            return mod(n, 2) == 1 ? 2 : 1
-        else
-            println("Pattern not implemented yet")
-            return -1
-        end
+        setVal = findall(x-> x==2, RootPattern)
+        return mod(n, length(RootPattern)) in setVal ? 2 : 1
     end
 
     V3b = [0.]
     CellSize = length(RootPattern)
     
+    GeneralTranslator = Ns == 4 ? fermion_momentum_translater_four : fermion_momentum_translater_six
+    translatorUnit = NS == 4 ? fermion_momentum_translater_two : fermion_momentum_translater_laugh
+
     params_4b=0.
-    H4, L4, R4, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "four", 0.0; spec="4B", rp=RootPattern, translator=fermion_momentum_translater_two, gap=false)
+    H4, L4, R4, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "four", 0.0; spec="4B", rp=RootPattern, translator=translatorUnit, gap=false)
     iMPO_4b = (H4, L4, R4)
 
     params_3b =0
-    H3, L3, R3, _  = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; spec="4B", s=s3, rp=RootPattern, translator=fermion_momentum_translater_two, gap=gap)
+    H3, L3, R3, _  = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; spec="4B", s=s3, rp=RootPattern, translator=translatorUnit, gap=gap)
     iMPO_3b = (H3, L3, R3)
     s = MPS_unitcell(s3)
 
     s4 = siteinds(H4)
     s3 = siteinds(H3)
 
-    for n in 1:4
+    for n in 1:CellSize
         replaceind!(H3[n], dag(s3[n]), dag(s4[n]))
         replaceind!(H3[n], prime(s3[n]), prime(s4[n]))
     end
@@ -216,19 +216,16 @@ function prepareMPO(H, L, R, ψ1)
 	temp_L = copy(L)
 
 	for j in 1:length(L)
-      
     	llink = only(commoninds(ψ.AL[0], ψ.AL[1]))
-        @show llink
-    	temp_L[j] = temp_L[j] * δ(llink, dag(prime(llink)))
+    	temp_L[j] = temp_L[j] * denseblocks(δ(llink, dag(prime(llink))))
 	end
-	
+    
     temp_R = copy(R)
 	for j in 1:length(R)
        
     	rlink = only(commoninds(ψ.AR[nsites(ψ)+1], ψ.AR[nsites(ψ)]))
-    	temp_R[j] = temp_R[j] * δ(rlink, dag(prime(rlink)))
+    	temp_R[j] = temp_R[j] * denseblocks(δ(rlink, dag(prime(rlink))))
 	end
-	
     for j in 1:nsites(ψ)
     	newH.data.data[j][end, 1] .+= -1*op("N", sp[j])
 	end
@@ -259,17 +256,16 @@ function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, type::
         ψ1 = oldDmrg.ψ
         sh = siteinds(ψ1)
         so = siteinds(H)
-        println(sh)
-        println(so)
-        flush(stdout)
-        for n in 1:4
+        
+      
+          #@show inds(ψ1.AL[1])
+        for n in 1:nsites(ψ1)
             replaceind!(H[n], dag(so[n]), dag(sh[n]))
             replaceind!(H[n], prime(so[n]), prime(sh[n]))
         end
-
-        ψ = copy(ψ1)
+        
+        return prepareMPO(H, L, R, ψ1)
     end 
-    println(siteinds(H))
-    flush(stdout)
+   
     return prepareMPO(H, L, R, ψ)
 end
