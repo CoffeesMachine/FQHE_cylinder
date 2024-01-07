@@ -1,5 +1,5 @@
 q = 3
-Lmin = 15
+Lmin = 15.
 Lmax = 19.
 NL = 8
 chiM = 400
@@ -11,7 +11,8 @@ ener_tol = 1e-8
 ent_tol = 1e-8
 maxIter = 50
 save_every = 2
-Nt = 600
+Nt = 200
 Ncell = 12
 FluxX = 0.0
-FluxY = 0.
+FluxY = 3.141592653589793
+cut = 0

@@ -120,58 +120,34 @@ function run()
     display(fig)
 end
 
-run()
+# run()
 
 
 function runPfaff()
     setRP = [[2,2,1,1], [2,1,2,1]]
-    path = "DMRG/Data/PfaffianInfinite/"
-    BerryPhaseD = Dict()
+    path = "Data/TransitionInfiniteCylinder/2b_3b/"
+    BerryPhaseD = Dict() 
+    
+    range =1:15
     for rp in setRP
-        filename = "DT_rp$(RootPattern_to_string(rp))_Lmin15.0_Lmax18.6_step19_chi512_Ncell12_Flux3.14159.jld2"
+        filename = "DT_rp$(RootPattern_to_string(rp))_Lmin15.0_Lmax22.0_step15_chi2048_Ncell12_Flux3.14159.jld2"
         #filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[6]).jld2"
 
         nameDehnTwist = path*filename
         
         el = load(nameDehnTwist, "dict twist")
-        vec = []
-        
-        if rp == [2,2,1,1]
-            
-            vec = real(el[rp])
-            
-            for ind in eachindex(vec)
-                vec[ind] = mod1(vec[ind], 1)
-                if ind == 7 || ind == 10 || ind == 11 
-                    vec[ind] -= .5
-                elseif ind >= 14
-                    vec[ind] -= 1
 
-                end
-            end
-        else
-            vec = real(el[rp])
-        
-            for ind in 1:length(vec)
-                vec[ind] = mod1(vec[ind], 1)
-                if ind == 17
-                    vec[ind] -= 0.1
-                end
-            end
-        end
-        #vec = el[rp]
-        BerryPhaseD[rp] = vec
+        @show el
+        BerryPhaseD[rp] = el[rp][range]
     end
-
-    
    
-    setL = collect(LinRange(15., 18.6, 19))
-
-    #=
+    setL = collect(LinRange(15., 22, 15))[range]
+    
+    
     for rp in setRP
-        plot_entanglement_spectrum(setL, rp)
+        #plot_entanglement_spectrum(setL, rp)
     end
-    =#
+    
     PhiX = pi
     setX = setL.*setL
 
