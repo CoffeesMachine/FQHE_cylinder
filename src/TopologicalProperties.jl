@@ -34,9 +34,9 @@ end
 function BerryPhase(rp::Vector{Int64}, L::Float64; χ::Int64, θ::Float64, tag::String, Ncell::Int64, Nτ::Int64, kwargs...)
 
     path = "/scratch/bmorier/$(tag)/"
-    println(kwargs[end])
+    println(kwargs[17])
     flush(stdout)
-    gapTag = kwargs[end] ? "gap_" : ""
+    gapTag = kwargs[17] ? "gap_" : ""
     name = gapTag*"rp$(RootPattern_to_string(rp))_chiMax$(maximum(kwargs[1]))_Ly$(round(L, digits=5))_theta$(round(θ, digits=5))_maxiters100_chi$(χ)_alpha0.0.jld2"
 
     #check is there is a file, if not run idmrg loop
