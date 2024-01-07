@@ -111,7 +111,7 @@ function K(ψ, topologicalShift, Φx, q)
             KN = qn[1][2].val
             NN = qn[1][1].val
             
-            Kloc = (KN -topologicalShift+(+1/2-Φx/2π)*NN)/q
+            Kloc = (KN -topologicalShift)/q
 
 
             Hloc += S[n,n]^2*(-Kloc)
