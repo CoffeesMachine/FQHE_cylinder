@@ -79,7 +79,7 @@ end
 
 function run()
 
-    filename = "DMRG/Input_Files_DehnTwist/test.in"
+    filename = "Input_Files_DehnTwist/test.in"
     θ = 0.
 
     kwargs = readInputFile(filename, θ)
@@ -88,7 +88,7 @@ function run()
 
     path = "DMRG/Data/Infinite/DehnTwist/" 
     PhiX = round(kwargs[17], digits=5)
-    filename = "cffd ut$(kwargs[21])_DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[15])_Flux$(PhiX).jld2"
+    filename = "cffdaasdasdsd ut$(kwargs[21])_DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[15])_Flux$(PhiX).jld2"
     #filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[6]).jld2"
     
     nameDehnTwist = path*filename
@@ -128,7 +128,8 @@ function runPfaff()
     path = "Data/TransitionInfiniteCylinder/2b_3b/"
     BerryPhaseD = Dict() 
     
-    range =1:15
+
+    range =1:13
     for rp in setRP
         filename = "DT_rp$(RootPattern_to_string(rp))_Lmin15.0_Lmax22.0_step15_chi2048_Ncell12_Flux3.14159.jld2"
         #filename = "DT_Lmin$(first(setL))_Lmax$(last(setL))_step$(length(setL))_chi$(kwargs[3])_Ncell$(kwargs[6]).jld2"
@@ -137,11 +138,10 @@ function runPfaff()
         
         el = load(nameDehnTwist, "dict twist")
 
-        @show el
         BerryPhaseD[rp] = el[rp][range]
     end
    
-    setL = collect(LinRange(15., 22, 15))[range]
+    setL = collect(LinRange(15., 20, 13))[range]
     
     
     for rp in setRP
@@ -152,6 +152,7 @@ function runPfaff()
     setX = setL.*setL
 
     
+
     fit = topologicalProperties(setL, BerryPhaseD, pi)
     f1 = fit[[2,2,1,1]]
     f2 = fit[[2,1,2,1]]
@@ -168,5 +169,5 @@ function runPfaff()
 
     return nothing
 end;
-    
+
 runPfaff();
