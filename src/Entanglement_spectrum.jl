@@ -57,3 +57,26 @@ function Sector_Entanglement_Spectrum(Spec::Dict, N::Int64)
 
     return DictRet
 end
+
+
+function entropy(psi::InfiniteCanonicalMPS, N::Int64)
+  
+  
+  ent = 0
+  localC = psi.C[N]
+
+  linkl = only(commoninds(psi.C[N], psi.AL[N]))
+  _, S, _ = svd(localC, [linkl])
+  for s in 1:size(S)[1]
+    ent += -2 * S[s, s]^2 * log(S[s, s])
+  end
+
+
+
+  return ent
+end
+
+function entropy(psi::Vector{InfiniteCanonicalMPS}, N::Int64)
+  retVec = [entropy(psiLoc, N) for psiLoc in psi]
+  return retVec
+end
