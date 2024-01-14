@@ -7,8 +7,6 @@ using FileIO
 using JLD2
 
 
-CorrelationLength(ψ::InfiniteCanonicalMPS) = EigenValueTransferMatrix(ψ, ψ; returnEig=2)
-
 function EigenValueTransferMatrix(ψ::InfiniteMPS, N::Int64)
 
     T =  TransferMatrix(ψ, ψ)
@@ -22,7 +20,6 @@ function EigenValueTransferMatrix(ψ::InfiniteMPS, N::Int64)
 
     return λ[1:N]
 end
-
 
 function EigenValueTransferMatrix(ψ1in::InfiniteCanonicalMPS, ψ2in::InfiniteCanonicalMPS; returnEig=1)
     ψ1 = copy(ψ1in)
@@ -72,7 +69,7 @@ function OverlapPF(setPsi::Vector{InfiniteCanonicalMPS}, psiPf::InfiniteCanonica
     ψPf = copy(psiPf)
     for j in 1:(length(setPsi))
         
-        ψ = setPsi[j]
+        ψ = copy(setPsi[j])
 
         append!(setλ, EigenValueTransferMatrix(ψ, ψPf))
     end
@@ -80,11 +77,15 @@ function OverlapPF(setPsi::Vector{InfiniteCanonicalMPS}, psiPf::InfiniteCanonica
     return setλ
 end
 
+###########################################
+###########################################
+###########################################
+###########################################
 
 
 function DehnTwist(ψ::InfiniteCanonicalMPS, topologicalShift::Int64)
 
-    BerryFac =  K(ψ, topologicalShift, 4) - 1/(24*2)
+    BerryFac =  K(ψ, topologicalShift, 4) + 1/(24*2)
     return BerryFac
    
 end
@@ -164,6 +165,7 @@ end
 ###########################################
 ###########################################
 
+CorrelationLength(ψ::InfiniteCanonicalMPS) = EigenValueTransferMatrix(ψ, ψ; returnEig=2)
 
 function CorrelationLength(setψ::Vector{InfiniteCanonicalMPS})
     corrlength = []
