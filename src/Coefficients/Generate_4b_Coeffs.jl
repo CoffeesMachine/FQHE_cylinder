@@ -60,7 +60,7 @@ function run4B(RootPattern, Ly; spectag="")
     translatorGeneral = length(RootPattern) == 4 ? fermion_momentum_translater_four : fermion_momentum_translater_six
     translatorUnit = length(RootPattern) == 4 ? fermion_momentum_translater_two : fermion_momentum_translater_laugh
 
-    gapTag = gap ? "gap" : ""
+
     tag = RootPattern_to_string(RootPattern)
 
     split_coeffs_name = "/scratch/bmorier/Coeff/Split_4b_Ly$(Ly)_$(tag)$(spectag).jld2"

@@ -40,7 +40,7 @@ end
 #################################
 #################################
 
-function GenMPOT(Ly::Float64, Vs::Array{Float64}, tag::String, type::String, model_params;spec="", s=nothing, rp=nothing, translator=nothing, gap = false)
+function GenMPOT(Ly::Float64, Vs::Array{Float64}, tag::String, type::String, model_params;spec="", s=nothing, rp=nothing, translator=nothing, gap = false, Haffnian=false)
     
     dir = "/scratch/bmorier/IMPO/"
     name= "Ly$(round(Ly, digits=5))_Interaction$(type)_RootPattern$(tag).jld2"
@@ -60,7 +60,7 @@ function GenMPOT(Ly::Float64, Vs::Array{Float64}, tag::String, type::String, mod
             return H, L, R, s
         end
     else
-        return Generate_MPO(rp, Ly, type;spectag=spec, gap=gap)
+        return Generate_MPO(rp, Ly, type;spectag=spec, gap=gap, Haffnian=Haffnian)
     end
 
 end;   
@@ -116,7 +116,7 @@ end;
 #################################
 #################################
 
-function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, V2b::Vector{Float64}, V3b::Vector{Float64}; prec=1e-10, gap=false)
+function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, V2b::Vector{Float64}, V3b::Vector{Float64}; prec=1e-10, gap=false, Haffnian=false)
 
     NS = length(RootPattern)
     
@@ -131,7 +131,7 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
     params_3b = 0.
     params_2b = (Ly = Ly, Vs = V2b, prec = prec)
 
-    H3, L3, R3, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; s=s2, rp=RootPattern, translator=translatorUnit, gap=gap)
+    H3, L3, R3, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; s=s2, rp=RootPattern, translator=translatorUnit, gap=gap, Haffnian=Haffnian)
     H2, L2, R2, _ = GenMPOT(Ly, V2b, RootPattern_to_string(RootPattern), "two", params_2b; s=s3, translator=translatorUnit)
     
     s3 = siteinds(H3)
@@ -164,7 +164,7 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
     return H, L, R, ψ
 end
 
-function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64; prec=1e-10, gap=false)
+function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64; prec=1e-10, gap=false, Haffnian=false)
     
     tag = RootPattern_to_string(RootPattern; first_term="4B_")
     
@@ -176,17 +176,17 @@ function GenerateBasicStructure(RootPattern::Vector{Int64}, Ly::Float64, θ::Flo
     V3b = [0.]
     CellSize = length(RootPattern)
     
-    GeneralTranslator = Ns == 4 ? fermion_momentum_translater_four : fermion_momentum_translater_six
-    translatorUnit = NS == 4 ? fermion_momentum_translater_two : fermion_momentum_translater_laugh
+    GeneralTranslator = CellSize == 4 ? fermion_momentum_translater_four : fermion_momentum_translater_six
+    translatorUnit = CellSize == 4 ? fermion_momentum_translater_two : fermion_momentum_translater_laugh
 
     params_4b=0.
     H4, L4, R4, s3 = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "four", 0.0; spec="4B", rp=RootPattern, translator=translatorUnit, gap=false)
     iMPO_4b = (H4, L4, R4)
 
     params_3b =0
-    H3, L3, R3, _  = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; spec="4B", s=s3, rp=RootPattern, translator=translatorUnit, gap=gap)
+    H3, L3, R3, _  = GenMPOT(Ly, V3b, RootPattern_to_string(RootPattern), "three", params_3b; spec="4B", s=s3, rp=RootPattern, translator=translatorUnit, gap=gap, Haffnian=Haffnian)
     iMPO_3b = (H3, L3, R3)
-    s = MPS_unitcell(s3)
+    s = MPS_unitcell(s3, CellSize)
 
     s4 = siteinds(H4)
     s3 = siteinds(H3)
@@ -239,14 +239,14 @@ function prepareMPO(H, L, R, ψ1)
     return dmrgStruct
 end
 
-function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, type::String, SavePath::String = ""; V2b::Vector{Float64}=[1.], V3b::Vector{Float64}=[0., 0., 1.], prec=1e-10, gap=false)
+function FQHE_idmrg(RootPattern::Vector{Int64}, Ly::Float64, θ::Float64, type::String, SavePath::String = ""; V2b::Vector{Float64}=[1.], V3b::Vector{Float64}=[0., 0., 1.], prec=1e-10, gap=false, Haffnian=false)
 
     H = 0; L = 0; R = 0; ψ=0;
     
     if type != "four"
-        H, L, R, ψ = GenerateBasicStructure(RootPattern, Ly, θ, V2b, V3b; prec=prec, gap=gap)
+        H, L, R, ψ = GenerateBasicStructure(RootPattern, Ly, θ, V2b, V3b; prec=prec, gap=gap, Haffnian=Haffnian)
     else
-        H, L, R, ψ = GenerateBasicStructure(RootPattern, Ly, θ; prec=prec, gap=gap)
+        H, L, R, ψ = GenerateBasicStructure(RootPattern, Ly, θ; prec=prec, gap=gap, Haffnian=Haffnian)
     end
 
     if SavePath != "" && isfile(SavePath)

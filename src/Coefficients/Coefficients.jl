@@ -44,10 +44,12 @@ function emptyMPO(V::Vector{Dict{Vector{Any}, Float64}})
 end
 
 
-function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String; spectag="", gap=false)
+function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String; spectag="", gap=false, Haffnian=false)
     
     gapTag = gap ? "gap" : ""
-    tagType = type == "three" ? "3b"*gapTag : "4b"
+    hafTag = Haffnian ? "Haf" : ""
+    hafTag 
+    tagType = type == "three" ? "3b"*gapTag*hafTag : "4b"
     tag = RootPattern_to_string(rp) 
     translator = length(rp) == 4 ? fermion_momentum_translater_two : fermion_momentum_translater_laugh
     DirAdd = type == "three" ? "" : "FourBody/"
@@ -55,10 +57,10 @@ function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String; spectag="", 
     CoeffName =  "/scratch/bmorier/Coeff/Split_"*tagType*"_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
     model = Model("fqhe_gen")
    
-    isfile(CoeffName) || Generate_Coeffs(rp, Ly, type, spectag, gap)
+    isfile(CoeffName) || Generate_Coeffs(rp, Ly, type, spectag, gap, Haffnian)
 
     Coeff, s = load(CoeffName, "coeffs", "s")
-    mpo_file = dir*DirAdd*gapTag*"/Ly$(round(Ly, digits=5))_Int$(type)_RootPattern$(tag).jld2"
+    mpo_file = dir*DirAdd*gapTag*"/$(hafTag)Ly$(round(Ly, digits=5))_Int$(type)_RootPattern$(tag).jld2"
 
     H = 0; 
     L = 0; 
@@ -111,10 +113,10 @@ function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String; spectag="", 
 
 end
 
-function Generate_Coeffs(rp::Vector{Int64}, Ly::Float64, type::String, spectag, gap) 
+function Generate_Coeffs(rp::Vector{Int64}, Ly::Float64, type::String, spectag, gap, Haffnian) 
     
     if type == "three" 
-        run3B(rp, Ly; spectag=spectag, gap=gap)
+        run3B(rp, Ly; spectag=spectag, gap=gap, Haffnian=Haffnian)
     elseif type == "four" 
         run4B(rp, Ly; spectag=spectag)
     else

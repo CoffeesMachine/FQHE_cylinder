@@ -83,28 +83,28 @@ function further_split_coeffs(coeffs, maxSize)
 end
 
 
-function run3B(RootPattern, Ly; spectag="", gap=false)
+function run3B(RootPattern, Ly; spectag="", gap=false, Haffnian=false)
 
     translatorGeneral = length(RootPattern) == 4 ? fermion_momentum_translater_four : fermion_momentum_translater_six
     translatorUnit = length(RootPattern) == 4 ? fermion_momentum_translater_two : fermion_momentum_translater_laugh
 
     gapTag = gap ? "gap" : ""
     tag = RootPattern_to_string(RootPattern)
+    hafTag = Haffnian ? "Haf" : ""
     
-    
-    split_coeffs_name = "/scratch/bmorier/Coeff/Split_3b$(gapTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
+    split_coeffs_name = "/scratch/bmorier/Coeff/Split_3b$(gapTag)$(hafTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
     
     if !isfile(split_coeffs_name)
         s = generate_basic_FQHE_siteinds(length(RootPattern), RootPattern; conserve_momentum=true, translator=translatorGeneral)
 
 
         s3 = CelledVector([deepcopy(s[Int64(i)]) for i=1:length(RootPattern)/2], translatorUnit)
-        CoeffName = "/scratch/bmorier/Coeff/Gen_3b$(gapTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
+        CoeffName = "/scratch/bmorier/Coeff/Gen_3b$(gapTag)$(hafTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
         
         Coeff = Dict()
         if !isfile(CoeffName)
             println("Generating new coefficients for Ly = $(Ly) with gap=$(gap)")
-            Coeff = build_three_body_pseudopotentials(;Ly=Ly, N_phi=round(Int64, 2*Ly), gap=gap)
+            Coeff = build_three_body_pseudopotentials(;Ly=Ly, N_phi=round(Int64, 2*Ly), gap=gap, Haffnian=Haffnian)
             save(CoeffName, "coefficients_Gen", Coeff, "s", s3)
         else
             Coeff, s3 = load(CoeffName, "coefficients_Gen", "s")

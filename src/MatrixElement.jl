@@ -168,8 +168,41 @@ function build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=1e
     end
     return coefficients
 end
-  
-  
+
+
+function build_three_body_coefficient_factorized_cylinder_5(Lx, Ly, N_phi; prec=1e-12)
+    coefficients = Dict{Tuple{Int64,Int64},Float64}()
+    for g in 0:2
+        for (k, q) in Iterators.product((-3N_phi - g):3:(3N_phi - 1), (-3N_phi - g):3:(3N_phi - 1))
+
+            W2 = 2*3* pi^2 / Ly^2 * ((k / 3)^2 + (q / 3)^2 + (-k / 3 - q / 3)^2)
+            coefficients[(k, q)] =
+                sqrt(Lx / Ly) / sqrt(N_phi) *
+                (2 * pi / Ly)^3 *
+                W_polynomial(k / 3, q / 3, -k / 3 - q / 3) * 
+                exp(-W2/3)
+        end
+    end
+    return coefficients
+end 
+
+function build_three_body_coefficient_factorized_cylinder_6(Lx, Ly, N_phi; prec=1e-12)
+    coefficients = Dict{Tuple{Int64,Int64},Float64}()
+    for g in 0:2
+        for (k, q) in Iterators.product((-3N_phi - g):3:(3N_phi - 1), (-3N_phi - g):3:(3N_phi - 1))
+
+            W2 = 2*3* pi^2 / Ly^2 * ((k / 3)^2 + (q / 3)^2 + (-k / 3 - q / 3)^2)
+            coefficients[(k, q)] =
+                sqrt(Lx / Ly) / sqrt(N_phi) *
+                (2 * pi / Ly)^6 *
+                W_polynomial(k / 3, q / 3, -k / 3 - q / 3) *
+                (k/3)*(q/3)*(-k/3-q/3)*
+                exp(-W2/3)
+        end
+    end
+    return coefficients
+end 
+
 function streamline_three_body_dictionnary_cylinder(dic, N_phi)
     coefficients = Dict{Tuple{Int64,Int64,Int64},Float64}()
     for n_1 in 0:(N_phi - 3)
@@ -182,7 +215,7 @@ function streamline_three_body_dictionnary_cylinder(dic, N_phi)
     end
     return coefficients
 end
-  
+
 function build_hamiltonian_from_three_body_factorized_streamlined_dictionary(
     coeff, N_phi; global_sign=1, prec=1e-12
   )
@@ -206,6 +239,33 @@ function build_hamiltonian_from_three_body_factorized_streamlined_dictionary(
     return full_coeff
 end
   
+function build_hamiltonian_from_three_body_factorized_streamlined_dictionary(
+    coeff::Vector{Dict}, N_phi; global_sign=1, prec=1e-12
+  )
+    full_coeff = Dict{Array{Int64,1},Float64}()
+    for R3 in 3:(3*N_phi - 3)  #Barycenter
+      for n_1 in max(0, R3 - 2N_phi + 3):min(N_phi - 3, R3 ÷ 3 - 1)
+        for n_2 in max(n_1 + 1, R3 - n_1 - N_phi + 1):min(N_phi - 2, (R3 - n_1 - 1) ÷ 2)
+          n_3 = R3 - n_1 - n_2
+          for m_1 in max(0, R3 - 2N_phi + 3):min(N_phi - 3, R3 ÷ 3 - 1)
+            for m_2 in max(m_1 + 1, R3 - m_1 - N_phi + 1):min(N_phi - 2, (R3 - m_1 - 1) ÷ 2)
+              m_3 = mod(R3 - m_1 - m_2, N_phi)
+              temp = 0 
+              for dictCoeff in coeff
+                temp += global_sign * (dictCoeff[n_1, n_2, n_3]' * dictCoeff[m_1, m_2, m_3])
+              end
+              if abs(temp) > prec
+                full_coeff[[m_1, m_2, m_3, n_3, n_2, n_1]] = temp
+              end
+            end
+          end
+        end
+      end
+    end
+    return full_coeff
+end
+
+
 function build_three_body_pseudopotentials(;
     r::Float64=1.0,
     Lx::Float64=-1.0,
@@ -213,7 +273,8 @@ function build_three_body_pseudopotentials(;
     N_phi::Int64=10,
     prec=1e-12,
     global_sign=1,
-    gap = false
+    gap = false, 
+    Haffnian = false
   )
     if Lx != -1
       println("Generating 3 body pseudopotential coefficients from Lx")
@@ -245,8 +306,23 @@ function build_three_body_pseudopotentials(;
     )
     flush(stdout)
 
-    coeff = build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=prec, gap=gap)
-    coeff = streamline_three_body_dictionnary_cylinder(coeff, N_phi)
+    coeff = 0 
+    if Haffnian 
+        println("Generating Haffnian Hamiltonian")
+        flush(stdout)
+        coeff = Vector{Dict}(undef, 3)
+        coeff[1] = build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=prec, gap=false)
+        coeff[2] = build_three_body_coefficient_factorized_cylinder_5(Lx, Ly, N_phi; prec=prec)
+        coeff[3] = build_three_body_coefficient_factorized_cylinder_6(Lx, Ly, N_phi; prec=prec)
+
+        coeff[1] = streamline_three_body_dictionnary_cylinder(coeff[1], N_phi)
+        coeff[2] = streamline_three_body_dictionnary_cylinder(coeff[2], N_phi)
+        coeff[3] = streamline_three_body_dictionnary_cylinder(coeff[3], N_phi)
+    else 
+        coeff = build_three_body_coefficient_factorized_cylinder(Lx, Ly, N_phi; prec=prec, gap=gap)
+        coeff = streamline_three_body_dictionnary_cylinder(coeff, N_phi)
+    end 
+
     coeff = build_hamiltonian_from_three_body_factorized_streamlined_dictionary(coeff, N_phi; global_sign=global_sign, prec=prec)
     return coeff
 end

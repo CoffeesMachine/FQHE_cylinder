@@ -9,9 +9,11 @@ using FileIO
 include("src/TopologicalProperties.jl")
 
 index = parse(Int64, ARGS[1])
+# RP = "101000"
+RP = ARGS[2]
 
-function readInputFile(filename, index)
-    setBoolean = ["tag", "FixL", "skipDT", "reloadStruct", "gap"]
+function readInputFile(filename, index, tagRP)
+    setBoolean = ["Haffnian", "tag", "FixL", "skipDT", "reloadStruct", "gap", "ReRunReload"]
     vars = Dict()
     open(filename) do ff
         for line in eachline(ff)
@@ -21,21 +23,8 @@ function readInputFile(filename, index)
             
         end
     end
-
-    RP = Int64[]
-    tagRP = vars["rp"]
-    if tagRP == 1. 
-        RP = [2,1,2,1]
-    elseif tagRP == 2.
-        RP = [2,2,1,1]
-    elseif tagRP == 3.
-        RP = [2,1,1,2,1,1]
-    elseif tagRP == 4. 
-        RP = [1,2,1,1,2,1]
-    elseif tagRP == 5. 
-        RP = [1,1,2,1,1,2]
-    end
-
+    
+    RP = [parse(Int64, x)+1 for x in collect(tagRP)]
     setL = LinRange(vars["Lmin"], vars["Lmax"], Int64(vars["NL"]))
     setT = LinRange(vars["thetamin"], vars["thetamax"], Int64(vars["NT"]))
 
@@ -46,8 +35,9 @@ function readInputFile(filename, index)
     if vars["FixL"] == "true"
         theta = setT[index]    
     else
-        #L = setL[index]
+        L = setL[index]
         theta = setT[1]
+        setL = [L]
     end
 
     setChi = [2^n for n=Int64(vars["chiMin"]):Int64(vars["chiMax"])]
@@ -57,6 +47,7 @@ function readInputFile(filename, index)
     V2 = [1.]
     V3 = [0., 0., 1.]
 
+    # alphas = vars["NoiseReload"] == 0 ? [0.0] : [1e-8, 0.0]
     alphas = [1e-8, 0.0]
 
     kwargs = (
@@ -84,17 +75,21 @@ function readInputFile(filename, index)
         Ne_unitCell = 2,
         skipDT = vars["skipDT"] == "true" ? true : false,
         reloadStruct = vars["reloadStruct"] == "true" ? true : false, 
-        gap = vars["gap"] == "true" ? true : false
+        gap = vars["gap"] == "true" ? true : false,
+        χMaxReload = Int64(vars["ChiMaxReload"]), 
+        ReRunReload = vars["ReRunReload"] == "true" ? true : false,
+        NoiseReload = vars["NoiseReload"],
+        Haffnian = vars["Haffnian"] == "true" ? true : false,
     )
 
    return kwargs, TypeOfMeasure
 end
 
-function run(index)
+function run(index, tagRP)
     filename = "ParametersFiles/Phase.in"
 
-    kwargs, TypeOfMeasure = readInputFile(filename, index)
-    println("\n####################################\n          Root pattern : $(RootPattern_to_string(kwargs[1]))   \n####################################\n")
+    kwargs, TypeOfMeasure = readInputFile(filename, index, tagRP)
+    println("\n####################################\n          Root pattern : $(RootPattern_to_string(kwargs[1])), $(kwargs[5])   \n####################################\n")
     flush(stdout)
     if TypeOfMeasure == "Dehn twist"
         setL = kwargs[2]
@@ -119,4 +114,5 @@ function run(index)
     println("Done")
 end
 
-run(index)
+
+run(index, RP)
