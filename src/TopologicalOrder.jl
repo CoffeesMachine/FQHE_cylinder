@@ -6,6 +6,8 @@ using KrylovKit
 using FileIO
 using JLD2
 
+include("InfiniteCylinder.jl")
+
 
 function EigenValueTransferMatrix(ψ::InfiniteMPS, N::Int64)
 
@@ -83,17 +85,16 @@ end
 ###########################################
 
 
-function DehnTwist(ψ::InfiniteCanonicalMPS, topologicalShift::Int64)
+function DehnTwist(ψ::InfiniteCanonicalMPS, topologicalShift::Int64; i=0)
 
-    BerryFac =  K(ψ, topologicalShift, 4) + 1/(24*2)
+    BerryFac =  K(ψ, topologicalShift, 4; i=i) + 1/(2*24)
     return BerryFac
    
 end
 
-function K(ψ, topologicalShift, q; Φx=0)
+function K(ψ, topologicalShift, q; i=0, Φx=0)
 
     Ktot = 0
-    i=0
     psi = ψ.C[i]
     ind = inds(psi)[1]
     _,S,_ = svd(psi, ind)
@@ -123,41 +124,95 @@ end
 ###########################################
 ###########################################
 
+function Charge(ψ::InfiniteCanonicalMPS)
+   
+    Q =   AvCell(ψ)- Av(ψ, 0)
+
+    return Q
+end
+
+function Av(ψ::InfiniteCanonicalMPS, i)
+
+    Ntot = 0
+    psi = ψ.C[i]
+    ind = inds(psi)[1]
+    _,S,_ = svd(psi, ind)
+
+    n=1
+    temp = inds(S)[1]
+    for qn in temp.space
+        for y in 1:qn[2] 
+            NN = qn[1][1].val/nsites(ψ)
+            Ntot += S[n,n]^2*(NN)
+            n += 1
+        end
+    end
+    
+    return Ntot
+end 
+
+function AvCell(ψ::InfiniteCanonicalMPS)
+
+    ret = 0 
+    for i in 1:nsites(ψ)
+        ret += Av(ψ, i)
+    end
+
+    return ret/nsites(ψ)
+end
 
 
-function StructureFactor(ψ1::InfiniteCanonicalMPS, Ly::Float64, M_max::Int64, theta::Float64, tagRP::String, chi::Int64; kmax=4.5, nstep = 20)
-    setK = LinRange(0, kmax, nstep)
+###########################################
+###########################################
+###########################################
+###########################################
 
-    ψ = finite_mps(copy(ψ1), 1:M_max)
 
-
-    savename = "Data/Analysis/CorrelationMatrix_L$(L)_Nphi$(M_max)_theta$(theta)_rp$(tagRP)_chi$(chi).jld2"
+function StructureFactor(ψ1::InfiniteCanonicalMPS, Ly::Float64, M_max::Int64, theta::Float64, tagRP::String, chi::Int64;kmin=0.01, kmax=4.5, nstep = 20)
+    setK = LinRange(kmin, kmax, nstep)
+    @show M_max
+    savename = "Data/Analysis/Infinite_CorrelationMatrix_L$(Ly)_Nphi$(M_max)_theta$(theta)_rp$(tagRP)_chi$(chi).jld2"
     CorrMatrix = 0
     ExpectN = 0
-
+    
     if isfile(savename)
         CorrMatrix, ExpectN = load(savename, "correlationMatrix", "expect")
     else
-
-        CorrMatrix = correlation_matrix(ψ, "N", "N"; sites=2:(M_max +1))
-        ExpectN= expect(ψ, "N";sites=2:(M_max+1))
+        # psi = finite_mps(ψ1, 1:M_max)
+        CorrMatrix = correlation_matrix(ψ1, "N", "N"; sites= -M_max+1:M_max,)
+        ExpectN= expect(ψ1, "N";sites=-M_max+1:M_max+1)
         save(savename, "correlationMatrix", CorrMatrix, "expect", ExpectN)
     end
-    
-    StructFac = [StructureFactor(CorrMatrix, ExpectN, k, 2pi/Ly)/M_max for k in setK]
+  
+    nameStruct = "Data/Analysis/StructureFactor_L$(Ly)_Nphi$(M_max)_theta$(theta)_rp$(tagRP)_chi$(chi)_kmin$(kmin)_kmax$(kmax)_nstep$(nstep).jld2"
 
+    StructFac = []
+
+    if isfile(nameStruct)
+        StructFac = load(nameStruct, "strc")
+    else 
+        StructFac = [StructureFactorEl(CorrMatrix, convert(Vector{Float64}, ExpectN), k, 2pi/Ly, -M_max+1:M_max) for k in setK]
+        save(nameStruct, "strc", StructFac)
+    end 
+    
     return StructFac, setK
 end
 
 
-function StructureFactor(CorrelationMatrix::Matrix{Float64}, ExpectedOcc::Vector{Float64}, k::Float64, AspectRatio::Float64)
+function StructureFactorEl(CorrelationMatrix::Matrix{Float64}, ExpectedOcc::Vector{Float64}, k::Float64, AspectRatio::Float64, range)
     structFac2 = 0
-    for n in eachindex(ExpectedOcc)
-        for m in eachindex(ExpectedOcc)
-            structFac2 += exp(-im*k*AspectRatio*(n-m))*(CorrelationMatrix[n,m] -ExpectedOcc[n]*ExpectedOcc[m])
-        end
-    end
-    return abs(structFac2)
+
+    for i in eachindex(range)
+        for j in eachindex(range)
+
+            Corr = CorrelationMatrix[i, j] - ExpectedOcc[i]*ExpectedOcc[j]
+            n1 = range[i]
+            n2 = range[j]
+            structFac2 += exp(-im*k*(n1-n2)*AspectRatio)*Corr
+        end   
+    end 
+
+    return abs(structFac2)/(length(range))
 end
 
 ###########################################
@@ -264,9 +319,6 @@ function pairCorrelation(Psi, L, thetaL; xmax=20, ymax=20., meshsize=(250, 250))
     return xgrid, ygrid, PairMatrix
 end 
 
-
-
-
 function PairCorrelationElement(X::Tuple{Float64, Float64}, Y::Tuple{Float64, Float64}, aspectRatio::Float64, CorrArray)
 
     corr = 0
@@ -292,3 +344,35 @@ function PairCorrelationElement(X::Tuple{Float64, Float64}, Y::Tuple{Float64, Fl
 
     return corr
 end
+
+
+###########################################
+###########################################
+###########################################
+###########################################
+
+function expectationSingleMPO(psi::InfiniteCanonicalMPS, Ly::Float64, θ::Float64, χ::Int64, rp::Vector{Int64}, type::String, range::AbstractRange)
+    
+    dir = "Data/IMPO/"
+    intType = type=="two" ? "Interaction" : "Int"
+    nameMPO = "Ly$(Ly)_$(intType)$(type)_RootPattern$(RootPattern_to_string(rp)).jld2"
+
+
+    H, L, R = load(dir*nameMPO, "H", "L", "R")
+    s = [inds(psi[i])[2] for i=1:nsites(psi)]
+
+    for i in 1:nsites(psi)
+
+    Hloc = H[i] 
+    @show inds(Hloc)
+    @show inds(L)
+    @show inds(R)
+    error("")
+    Hloc = Hloc*L*R
+    end
+
+
+
+
+
+end 
