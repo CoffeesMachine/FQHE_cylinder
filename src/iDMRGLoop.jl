@@ -7,12 +7,13 @@ include("InfiniteCylinder.jl")
 
 idmrgLoop(; rp::Vector{Int64}, setL::LinRange{Float64, Int64}, tag::String, θ::Float64, kwargs...) = idmrgLoop(rp, setL[1], tag, θ; kwargs...)
     
-idmrgLoop(rp::Vector{Int64}, L::Float64; tag::String, θ::Float64, kwargs...) = idmrgLoop(rp, L, tag, θ; kwargs...)
+idmrgLoop(;rp::Vector{Int64}, setL::Vector{Float64}, tag::String, θ::Float64, kwargs...) = idmrgLoop(rp, setL[1], tag, θ; kwargs...)
 
 function idmrgLoop(RootPattern::Vector{Int64}, Ly::Float64, tag::String, θ::Float64; Haffnian::Bool, gap::Bool, χMaxReload::Int64, ReRunReload::Bool, reloadStruct::Bool, ChiTest::Int64, stepL::Float64, setχ::Vector{Int64}, V2b::Vector{Float64}, V3b::Vector{Float64}, prec::Float64, maxIter::Int64, NoiseReload::Float64, kwargs...)
     
-    println("Calulating for L=$(Ly)")
-    println("\n####################################\n          Theta : $(θ)   \n####################################\n")
+    typeint = tag == "2b_3b" ? "Two-body three-body interaction" : "Three-body four-body interaction"
+    fill = mod(length(RootPattern), 3) == 0 ? "1/3" : "1/2"
+    println("Parameters are : \n####################################\n          Theta : $(θ)\n           Root pattern : $(RootPattern_to_string(RootPattern))\n          Ly : $(Ly) \n $(typeint)\n         filling : $(fill)   \n####################################\n")
     flush(stdout)
     path = "/scratch/bmorier/$(tag)/"
     gapTag  = gap ? "gap_" : ""
@@ -32,7 +33,6 @@ function idmrgLoop(RootPattern::Vector{Int64}, Ly::Float64, tag::String, θ::Flo
         dmrgStruct = FQHE_idmrg(RootPattern, Ly, θ, type, savedpath; V2b=V2b, V3b=V3b, prec=prec, gap=gap, Haffnian=Haffnian)
 
         for χ in setχ
-            
             idmrgLoop(dmrgStruct, nameN, χ, maxIter; kwargs...)
         end 
     else
