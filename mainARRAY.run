@@ -1,14 +1,14 @@
 #!/bin/bash
 
 #SBATCH --job-name=DT_test
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=11
 #SBATCH --time=3-00:00:00
-#SBATCH --mem=15GB
+#SBATCH --mem=120GB
 #SBATCH --qos=serial
 #SBATCH --output=logs/%x_%a.o        
 #SBATCH --error=logs/%x_%a.e         
 #SBATCH --ntasks=1
-#SBATCH --array=15-30
+#SBATCH --array=1-7
 
 
 mkdir -p logs
