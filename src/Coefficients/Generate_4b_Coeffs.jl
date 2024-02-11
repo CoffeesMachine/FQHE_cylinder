@@ -65,7 +65,7 @@ function run4B(RootPattern, Ly; spectag="")
 
     split_coeffs_name = "/scratch/bmorier/Coeff/Split_4b_Ly$(Ly)_$(tag)$(spectag).jld2"
     
-    if !isfile(split_coeffs_name)
+    # if !isfile(split_coeffs_name)
         s = generate_basic_FQHE_siteinds(length(RootPattern), RootPattern; conserve_momentum=true, translator=translatorGeneral)
         println("Number of threads is $(Threads.nthreads())")
 
@@ -92,9 +92,9 @@ function run4B(RootPattern, Ly; spectag="")
             coeffs2[k] = further_split_coeffs(v, 750)
         end
         save(split_coeffs_name, "coeffs", coeffs2, "s", s3)
-    else
-        println("Coefficients already generated")
-    end
+    # else
+        # println("Coefficients already generated")
+    # end
 end
 
 

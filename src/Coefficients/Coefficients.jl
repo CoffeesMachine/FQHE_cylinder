@@ -67,7 +67,6 @@ function Generate_MPO(rp::Vector{Int64}, Ly::Float64, type::String; spectag="", 
     R = 0; 
     counter = 0
 
-
     if isfile(mpo_file)
         println("Loading the MPO")
         flush(stdout)

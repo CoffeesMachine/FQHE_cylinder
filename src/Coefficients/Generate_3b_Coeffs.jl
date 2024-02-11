@@ -94,7 +94,7 @@ function run3B(RootPattern, Ly; spectag="", gap=false, Haffnian=false)
     
     split_coeffs_name = "/scratch/bmorier/Coeff/Split_3b$(gapTag)$(hafTag)_Ly$(round(Ly, digits=5))_$(tag)$(spectag).jld2"
     
-    if !isfile(split_coeffs_name)
+    # if !isfile(split_coeffs_name)
         s = generate_basic_FQHE_siteinds(length(RootPattern), RootPattern; conserve_momentum=true, translator=translatorGeneral)
 
 
@@ -119,7 +119,7 @@ function run3B(RootPattern, Ly; spectag="", gap=false, Haffnian=false)
         end
         
         save(split_coeffs_name, "coeffs", coeffs2, "s", s3)
-    else
-        println("Coefficients already generated")
-    end
+    # else
+    #     println("Coefficients already generated")
+    # end
 end
