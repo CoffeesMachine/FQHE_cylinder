@@ -5,3 +5,4 @@ DMRG/*
 DMRG/Data/InfMPO/InfMPO_2body/*
 archives/*
 ParametersFiles/*
+StructureFactor.jl
